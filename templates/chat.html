@@ -1,31 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FloatChat AI - ARGO Ocean Data Explorer</title>
+    <title>FloatChat AI - ARGO Multimodal Discovery Platform</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            900: '#164e63',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body {
-            background-color: #0b1120;
-            color: #f8fafc;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-        }
-
-        .glass-panel {
-            background: rgba(17, 24, 39, 0.75);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-
-        .sidebar {
-            width: 300px;
-            transition: all 0.3s ease;
+        .glass-panel-dark {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(14px);
+            border-color: rgba(255, 255, 255, 0.08);
         }
 
         .plot-container {
@@ -38,7 +44,7 @@
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #334155;
+            background: #64748b;
             border-radius: 4px;
         }
 
@@ -62,45 +68,76 @@
     </style>
 </head>
 
-<body class="flex h-screen overflow-hidden">
+<body
+    class="bg-slate-950 text-slate-100 dark:bg-slate-950 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200">
 
-    <!-- Left Sidebar: Chat History -->
-    <aside class="sidebar glass-panel border-r border-slate-800 flex flex-col h-full z-20">
+    <!-- Left Sidebar: ChromaDB History & SQLite Relational Session -->
+    <aside id="sidebar-container"
+        class="w-72 glass-panel-dark border-r border-slate-800 flex flex-col h-full z-20 transition-colors duration-200">
+        <!-- Brand Header -->
         <div class="p-4 border-b border-slate-800 flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
                     <i class="fa-solid fa-water"></i>
                 </div>
-                <span class="font-bold text-sm tracking-wide text-slate-100">FloatChat AI</span>
+                <div>
+                    <h1 class="font-bold text-sm tracking-wide">FloatChat AI</h1>
+                    <p class="text-[10px] text-slate-400">ARGO In-Situ Discovery</p>
+                </div>
             </div>
-            <button onclick="startNewChat()" title="New Chat"
-                class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs border border-slate-700 flex items-center gap-1 transition">
+            <button onclick="startNewChat()" title="New Chat Session"
+                class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs border border-slate-700 flex items-center gap-1 transition">
                 <i class="fa-solid fa-plus"></i> New
             </button>
         </div>
 
-        <div class="p-3 flex items-center justify-between">
-            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1">Recent Inquiries</span>
-            <span id="history-count" class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">0</span>
+        <!-- History Title and Counter -->
+        <div class="p-3 flex items-center justify-between border-b border-slate-800/50">
+            <span
+                class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-database text-cyan-400 text-[10px]"></i> ChromaDB History
+            </span>
+            <span id="history-count"
+                class="text-[10px] bg-slate-800 text-cyan-300 px-2 py-0.5 rounded-full font-mono">0</span>
         </div>
 
-        <!-- History List -->
-        <div id="history-list" class="flex-1 overflow-y-auto px-2 space-y-1 text-xs text-slate-300">
-            <!-- Populated dynamically from ChromaDB per user session -->
+        <!-- ChromaDB History List -->
+        <div id="history-list" class="flex-1 overflow-y-auto p-2 space-y-1 text-xs">
+            <!-- Dynamically populated from ChromaDB -->
         </div>
 
-        <!-- Sidebar Footer: User, Clear, Logout -->
-        <div class="p-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-            <button onclick="clearAllHistory()"
-                class="text-rose-400 hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
-                <i class="fa-regular fa-trash-can"></i> Clear History
-            </button>
-            <div class="flex items-center gap-2">
-                <span class="text-[11px] text-cyan-400 font-medium truncate max-w-[80px]" title="{{ current_user }}">
-                    <i class="fa-solid fa-user-circle mr-0.5"></i> {{ current_user or 'User' }}
-                </span>
+        <!-- Sidebar Footer: Relational SQLite Profile, Theme Switcher & Clear History -->
+        <div class="p-3 border-t border-slate-800 flex flex-col gap-2.5">
+            <div class="flex items-center justify-between text-xs">
+                <!-- Clear DB Sessions -->
+                <button onclick="clearAllHistory()"
+                    class="text-rose-400 hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
+                    <i class="fa-regular fa-trash-can"></i> Clear History
+                </button>
+
+                <!-- Light / Dark Mode Toggle Button -->
+                <button id="theme-toggle" onclick="toggleTheme()"
+                    class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 dark:text-amber-300 text-xs border border-slate-700 flex items-center gap-1.5 transition"
+                    title="Toggle Theme">
+                    <i id="theme-icon" class="fa-solid fa-sun"></i>
+                    <span id="theme-text" class="text-[10px] text-slate-300">Light</span>
+                </button>
+            </div>
+
+            <!-- Relational DB User Session -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+                <div class="flex items-center gap-2 truncate">
+                    <div
+                        class="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <span class="text-[11px] text-slate-300 font-medium truncate max-w-[120px]"
+                        title="Authenticated User">
+                        {{ current_user or 'Operator' }}
+                    </span>
+                </div>
                 <a href="/logout" title="Sign Out"
-                    class="text-slate-400 hover:text-rose-400 transition flex items-center gap-1 text-[11px]">
+                    class="text-slate-400 hover:text-rose-400 transition text-[11px] flex items-center gap-1">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
                 </a>
             </div>
@@ -108,17 +145,20 @@
     </aside>
 
     <!-- Main Workspace -->
-    <div class="flex-1 flex flex-col h-full overflow-hidden">
+    <div class="flex-1 flex flex-col h-full overflow-hidden bg-slate-900/40">
+
         <!-- Header -->
-        <header class="glass-panel px-6 py-3.5 flex items-center justify-between border-b border-slate-800">
+        <header id="main-header"
+            class="glass-panel-dark px-6 py-3.5 flex items-center justify-between border-b border-slate-800 transition-colors duration-200">
             <div>
                 <h2 class="font-semibold text-sm text-slate-100 flex items-center gap-2">
                     ARGO Multimodal Intelligence Workspace
                     <span
-                        class="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">Voice
-                        + Telemetry Upload + Text</span>
+                        class="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">ChromaDB
+                        + SQLite</span>
                 </h2>
-                <p class="text-xs text-slate-400">In-situ Profiles, Hypoxia OMZ, Thermal Gradients & Data Pipeline</p>
+                <p class="text-xs text-slate-400">In-situ CTD Profiles, Hypoxic OMZ, Thermal Dynamics & Multi-Region
+                    Basins</p>
             </div>
             <div class="text-xs text-slate-400 flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -128,25 +168,57 @@
 
         <!-- Message Thread -->
         <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
+            <!-- Welcome Panel with Suggestions -->
             <div id="welcome-message" class="flex items-start space-x-3">
                 <div
-                    class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
-                    <i class="fa-solid fa-lightbulb"></i>
+                    class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
+                    <i class="fa-solid fa-compass"></i>
                 </div>
-                <div class="glass-panel p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl max-w-3xl">
-                    <p class="font-semibold text-cyan-400 mb-1">Multimodal Workspace Ready</p>
-                    <p class="text-xs text-slate-300">Interact using any input mode:</p>
-                    <ul class="list-disc ml-5 mt-2 space-y-1 text-slate-400 text-xs">
-                        <li><strong>Text:</strong> Type natural oceanographic questions or geographic coordinates.</li>
-                        <li><strong>Voice:</strong> Click the microphone icon to speak directly.</li>
-                        <li><strong>File Upload:</strong> Attach `.csv`, `.nc`, `.txt`, `.json`, or `.pdf` (including
-                            handwritten scans).</li>
-                    </ul>
+                <div id="welcome-card"
+                    class="glass-panel-dark p-5 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-2xl max-w-4xl shadow-lg space-y-3">
+                    <div>
+                        <p class="font-semibold text-cyan-400 text-base">ARGO Ocean Discovery Workspace Ready</p>
+                        <p class="text-xs text-slate-300 mt-1">Interact using natural language, voice dictation, or raw
+                            data attachments (.csv, .json, .pdf handwritten scans).</p>
+                    </div>
+
+                    <!-- Question Suggestions Section -->
+                    <div class="pt-2 border-t border-slate-800/80">
+                        <p
+                            class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
+                            <i class="fa-solid fa-lightbulb text-amber-400"></i> Suggested Inquiries:
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                onclick="applySuggestion('What is the salinity and temperature profile in further deep regions from surface down to 2000 dbar?')"
+                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-water text-[10px]"></i> Salinity profile in further regions
+                                (0–2000 dbar)
+                            </button>
+                            <button
+                                onclick="applySuggestion('What is the average temperature in the Arabian Sea across the upper mixed layer and deep thermocline?')"
+                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-layer-group text-[10px]"></i> Arabian Sea Mixed Layer vs Deep
+                                Thermocline
+                            </button>
+                            <button
+                                onclick="applySuggestion('Show all ARGO float observations within 5 degree latitude of the equator in the Indian Ocean basin')"
+                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-location-crosshairs text-[10px]"></i> Equatorial float array (±5°
+                                latitudinal belt)
+                            </button>
+                            <button
+                                onclick="applySuggestion('Analyze hypoxic dead zones and dissolved oxygen minimum zones below 200 dbar in the northern basin')"
+                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-biohazard text-[10px]"></i> Oxygen Minimum Zones below 200 dbar
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
 
-        <!-- Staged File Banner -->
+        <!-- Staged File Preview Banner -->
         <div id="file-preview-banner"
             class="hidden px-6 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-cyan-400">
             <div class="flex items-center gap-2">
@@ -159,8 +231,30 @@
             </button>
         </div>
 
-        <!-- Input Bar with Voice & Attachment Controls -->
-        <footer class="p-4 glass-panel border-t border-slate-800">
+        <!-- Suggestion Chips Bar -->
+        <div
+            class="px-6 py-2 border-t border-slate-800/60 bg-slate-950/80 flex items-center gap-2 overflow-x-auto text-xs">
+            <span class="text-[10px] uppercase font-bold text-slate-400 whitespace-nowrap"><i
+                    class="fa-solid fa-bolt text-cyan-400 mr-1"></i>Quick Queries:</span>
+            <button
+                onclick="applySuggestion('What is the salinity profile in further deep regions from surface down to 2000 dbar?')"
+                class="whitespace-nowrap px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
+                Salinity in Further Deep Regions (0–2000 dbar)
+            </button>
+            <button
+                onclick="applySuggestion('Which specific ARGO float platform recorded the lowest temperature anomaly at 1000 dbar?')"
+                class="whitespace-nowrap px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
+                Lowest Temp Platform Anomaly (1000 dbar)
+            </button>
+            <button
+                onclick="applySuggestion('How does the autonomous 10-day buoyancy-driven profiling cycle operate for Core ARGO floats?')"
+                class="whitespace-nowrap px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
+                10-Day Autonomous Buoyancy Mission
+            </button>
+        </div>
+
+        <!-- Input Bar with Voice, File Attachment, and Execution -->
+        <footer id="main-footer" class="p-4 glass-panel-dark border-t border-slate-800 transition-colors duration-200">
             <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-2">
                 <!-- Hidden File Input -->
                 <input type="file" id="file-input" class="hidden" accept=".csv,.txt,.json,.nc,.dat,.pdf,.png,.jpg,.jpeg"
@@ -173,7 +267,7 @@
                     <i class="fa-solid fa-paperclip text-sm"></i>
                 </button>
 
-                <!-- Voice Recording Button -->
+                <!-- Voice Dictation Button -->
                 <button type="button" id="mic-btn" onclick="toggleVoiceRecording()" title="Voice Input (Click to speak)"
                     class="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 rounded-xl border border-slate-700 transition">
                     <i id="mic-icon" class="fa-solid fa-microphone text-sm"></i>
@@ -181,7 +275,7 @@
 
                 <!-- Text Query Field -->
                 <input id="user-input" type="text"
-                    placeholder="Ask or speak an ocean query (e.g. 'What is the average temperature at 100 dbar?')"
+                    placeholder="Ask or speak an ocean query (e.g. 'What is the salinity profile in further deep regions from surface down to 2000 dbar?')"
                     class="flex-1 bg-slate-900/90 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
                     autocomplete="off" />
 
@@ -209,15 +303,46 @@
         const stagedFileSize = document.getElementById('staged-file-size');
         const micBtn = document.getElementById('mic-btn');
         const micIcon = document.getElementById('mic-icon');
+        const themeIcon = document.getElementById('theme-icon');
+        const themeText = document.getElementById('theme-text');
 
         let dbHistory = [];
         let stagedFile = null;
         let isRecording = false;
         let recognition = null;
 
-        // =========================================================================
-        // VOICE INPUT (WEB SPEECH API)
-        // =========================================================================
+        // Theme Controller
+        function applySavedTheme() {
+            const savedTheme = localStorage.getItem('floatchat_theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.body.classList.remove('bg-slate-950', 'text-slate-100');
+                document.body.classList.add('bg-slate-100', 'text-slate-800');
+                themeIcon.className = "fa-solid fa-moon text-indigo-400";
+                themeText.textContent = "Dark";
+            } else {
+                document.documentElement.classList.add('dark');
+                document.body.classList.remove('bg-slate-100', 'text-slate-800');
+                document.body.classList.add('bg-slate-950', 'text-slate-100');
+                themeIcon.className = "fa-solid fa-sun text-amber-300";
+                themeText.textContent = "Light";
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('floatchat_theme', isDark ? 'light' : 'dark');
+            applySavedTheme();
+        }
+
+        // Suggestions Handler
+        function applySuggestion(text) {
+            userInput.value = text;
+            userInput.focus();
+            chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+
+        // Voice Input Setup
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -229,7 +354,7 @@
                 isRecording = true;
                 micBtn.classList.add('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
                 micIcon.className = "fa-solid fa-microphone-lines text-rose-400";
-                userInput.placeholder = "Listening to oceanographic query...";
+                userInput.placeholder = "Listening to oceanographic inquiry...";
             };
 
             recognition.onresult = function (event) {
@@ -247,7 +372,7 @@
                 stopVoiceRecording();
             };
         } else {
-            micBtn.title = "Voice recognition is not supported in this browser.";
+            micBtn.title = "Voice recognition not supported in this browser.";
         }
 
         function toggleVoiceRecording() {
@@ -267,12 +392,10 @@
             isRecording = false;
             micBtn.classList.remove('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
             micIcon.className = "fa-solid fa-microphone text-slate-300";
-            userInput.placeholder = "Ask or speak an ocean query (e.g. 'What is the average temperature at 100 dbar?')";
+            userInput.placeholder = "Ask or speak an ocean query (e.g. 'What is the average temperature in the Arabian Sea?')";
         }
 
-        // =========================================================================
-        // FILE HANDLING
-        // =========================================================================
+        // File Selection Handlers
         function handleFileSelected(e) {
             const file = e.target.files[0];
             if (file) {
@@ -290,9 +413,7 @@
             fileBanner.classList.add('hidden');
         }
 
-        // =========================================================================
-        // CHAT & CHROMA PERSISTENCE
-        // =========================================================================
+        // ChromaDB Operations
         async function loadHistoryFromDB() {
             try {
                 const res = await fetch('/history');
@@ -313,7 +434,7 @@
             historyCount.textContent = dbHistory.length;
 
             if (dbHistory.length === 0) {
-                historyList.innerHTML = '<div class="p-3 text-slate-500 text-center text-[11px]">No saved sessions found.</div>';
+                historyList.innerHTML = '<div class="p-3 text-slate-500 text-center text-[11px]">No saved ChromaDB sessions found.</div>';
                 return;
             }
 
@@ -352,6 +473,7 @@
         }
 
         async function clearAllHistory() {
+            if (!confirm("Are you sure you want to clear all ChromaDB chat history for your session?")) return;
             try {
                 await fetch('/history/clear', { method: 'POST' });
                 dbHistory = [];
@@ -390,10 +512,10 @@
 
             let contentHtml = `
                 <div class="flex items-start space-x-3">
-                    <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
-                        <i class="fa-solid fa-lightbulb"></i>
+                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
+                        <i class="fa-solid fa-water"></i>
                     </div>
-                    <div class="glass-panel p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md">
+                    <div class="glass-panel-dark p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md">
                         <div class="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
                         <span class="block text-left text-[10px] text-slate-400 mt-2">${time}</span>
                         ${chartJson ? `
@@ -454,9 +576,7 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // =========================================================================
-        // FORM SUBMISSION (TEXT + MULTIPART FILE UPLOAD)
-        // =========================================================================
+        // Form Submit Handler
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = userInput.value.trim();
@@ -475,7 +595,7 @@
             chatBox.insertAdjacentHTML('beforeend', `
                 <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-400 text-xs py-2">
                     <i class="fa-solid fa-spinner fa-spin text-sm"></i>
-                    <span>Analyzing multimodal input & oceanographic data...</span>
+                    <span>Analyzing oceanographic telemetry & physical dynamics...</span>
                 </div>
             `);
             scrollToBottom();
@@ -517,7 +637,11 @@
             }
         });
 
-        document.addEventListener('DOMContentLoaded', loadHistoryFromDB);
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            applySavedTheme();
+            loadHistoryFromDB();
+        });
     </script>
 </body>
 
