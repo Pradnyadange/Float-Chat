@@ -8,43 +8,112 @@
     --accent-cyan: #38bdf8;
     --accent-emerald: #10b981;
     --accent-rose: #f43f5e;
-    --text-primary: #f8fafc;
+    --text-primary: #1e3a8a; /* Deep blue for light mode */
     --text-secondary: #94a3b8;
 }
 
-body {
-            background-color: #f8fafc;
-            color: #0f172a;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            transition: background-color 0.3s, color 0.3s;
-        }
-
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(0, 0, 0, 0.1);
-        }
-
-        /* Dark mode overrides */
-        html.dark body {
-            background-color: #0f172a;
-            color: #f8fafc;
-        }
-
-        html.dark .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-.main-wrapper {
-    padding: 1.5rem 1rem;
+/* --- Base Layout & Video Integration --- */
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: transparent !important; /* Critical to see the video */
+    color: var(--text-primary);
+    overflow-x: hidden;
+    position: relative;
+    transition: color 0.3s ease;
 }
 
+/* Full-screen moving ocean background */
+#ocean-bg {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    object-position: center;
+    z-index: 0;
+    pointer-events: none;
+    display: block;
+}
+
+/* --- Light Mode / Dark Mode Overlay --- */
+.ocean-overlay {
+    position: fixed;
+    inset: 0;
+    background:transparent; /* Very faint tint to reveal waves */
+    z-index: 1;
+    pointer-events: none;
+    transition: background 0.3s ease;
+}
+
+html.dark body {
+    color: #f8fafc; /* Slate text for dark mode */
+}
+
+html.dark .ocean-overlay {
+    background: rgba(3, 18, 35, 0.6); /* Deep ocean overlay for dark mode */
+}
+
+.app-content, .main-wrapper {
+    position: relative;
+    z-index: 2;
+}
+
+/* --- Glass Panels (Light & Dark) --- */
+.glass-panel {
+    background: rgba(240, 248, 255, 0.85); /* Alice blue tint for light mode */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(30, 58, 138, 0.15); /* Light blue border */
+    transition: background 0.3s ease, border 0.3s ease;
+}
+
+html.dark .glass-panel {
+    background: rgba(30, 41, 59, 0.7); /* Slate tint for dark mode */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar {
+    width: 300px;
+    transition: all 0.3s ease;
+}
+
+.plot-container {
+    width: 100% !important;
+    min-height: 420px;
+}
+
+/* --- Custom Scrollbars --- */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #94a3b8; /* Lighter scrollbar for light mode */
+    border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+    background: #334155; /* Darker scrollbar for dark mode */
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.5);
+}
+
+/* -----------------------------------------------------------
+   Legacy / Partner CSS Components (Preserved for compatibility) 
+--------------------------------------------------------------*/
 .glass-card {
     height: 88vh;
     min-height: 620px;
     border-radius: 24px !important;
-    background: var(--card-bg) !important;
+    background: rgba(15, 30, 50, 0.55) !important;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border-color) !important;
@@ -79,7 +148,6 @@ body {
     border: 2px solid var(--accent-cyan) !important;
 }
 
-/* User & Bot Avatar Constraints */
 img {
     max-width: 100%;
     height: auto;
@@ -126,109 +194,4 @@ img {
     bottom: 2px;
     right: 2px;
     border: 2px solid #0f172a;
-}
-
-/* Message Card Body */
-.msg_card_body {
-    flex: 1;
-    padding: 1.5rem;
-    overflow-y: auto;
-    scroll-behavior: smooth;
-}
-
-.msg_cotainer {
-    max-width: 85%;
-    margin-left: 12px;
-    border-radius: 18px 18px 18px 4px;
-    background-color: var(--bot-msg-bg);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 14px 18px;
-    color: #e2e8f0;
-    font-size: 0.92rem;
-    line-height: 1.55;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-    position: relative;
-}
-
-.msg_cotainer_send {
-    max-width: 80%;
-    margin-right: 12px;
-    border-radius: 18px 18px 4px 18px;
-    background: var(--user-msg-bg);
-    padding: 12px 18px;
-    color: #ffffff;
-    font-size: 0.92rem;
-    font-weight: 500;
-    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
-    position: relative;
-}
-
-.msg_time, .msg_time_send {
-    display: block;
-    margin-top: 6px;
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-}
-
-.msg_time_send {
-    text-align: right;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-/* Card Footer Input */
-.card-footer {
-    background: rgba(15, 23, 42, 0.95) !important;
-    border-bottom-left-radius: 24px !important;
-    border-bottom-right-radius: 24px !important;
-    padding: 1.2rem 1.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-}
-
-.type_msg {
-    background-color: rgba(30, 41, 59, 0.8) !important;
-    border: 1px solid rgba(148, 163, 184, 0.2) !important;
-    color: #ffffff !important;
-    height: 52px !important;
-    border-radius: 16px 0 0 16px !important;
-    padding-left: 1.2rem;
-    font-size: 0.95rem;
-}
-
-.type_msg:focus {
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25) !important;
-    border-color: var(--accent-cyan) !important;
-}
-
-.send_btn {
-    border-radius: 0 16px 16px 0 !important;
-    background: linear-gradient(135deg, #0284c7, #0369a1) !important;
-    border: 0 !important;
-    color: white !important;
-    width: 58px;
-    cursor: pointer;
-    font-size: 1.1rem;
-    transition: all 0.2s ease;
-}
-
-.send_btn:hover {
-    background: linear-gradient(135deg, #0369a1, #075985) !important;
-    box-shadow: 0 0 12px rgba(2, 132, 199, 0.5);
-}
-
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-    width: 6px;
-}
-
-::-webkit-scrollbar-track {
-    background: rgba(15, 23, 42, 0.5);
-}
-
-::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.3);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(56, 189, 248, 0.5);
 }

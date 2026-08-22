@@ -18,29 +18,35 @@
     <style>
         /* --- Light Mode (White background, Blue text) --- */
         body {
-            background-color: #ffffff; 
-            color: #1e3a8a; /* Deep blue */
+            background-color: #ffffff;
+            color: #1e3a8a;
             font-family: 'Segoe UI', system-ui, sans-serif;
             transition: background-color 0.3s, color 0.3s;
         }
 
-        .chat-bubble {
-            max-width: 88%;
-            border-radius: 1rem;
+        .glass-panel {
+            background: rgba(240, 248, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(30, 58, 138, 0.15);
         }
 
-        .glass-panel {
-            background: rgba(240, 248, 255, 0.85); /* Alice blue tint for light mode */
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(30, 58, 138, 0.15); /* Light blue border */
+        .sidebar {
+            width: 300px;
+            transition: all 0.3s ease;
+        }
+
+        .plot-container {
+            width: 100% !important;
+            min-height: 420px;
         }
 
         ::-webkit-scrollbar {
-            width: 6px;
+            width: 5px;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #94a3b8; /* Lighter scrollbar for light mode */
+            background: #94a3b8;
             border-radius: 4px;
         }
 
@@ -59,123 +65,234 @@
             background: #334155;
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
-<body class="flex flex-col h-screen overflow-hidden">
+<body>
+    <video id="ocean-bg" class="absolute inset-0 w-full h-full object-cover -z-10" autoplay muted loop playsinline>
+        <source src="{{ url_for('static', filename='video/ocean-bg.mp4') }}" type="video/mp4">
+    </video>
 
-    <!-- Header -->
-    <!-- Header -->
-    <header class="glass-panel px-6 py-4 flex items-center justify-between z-10 shadow-lg">
-        <div class="flex items-center space-x-3">
-            <div
-                class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl border border-cyan-500/30">
-                <i class="fa-solid fa-water"></i>
+    <div class="ocean-overlay"></div>
+
+    <div class="app-content flex h-screen overflow-hidden">
+        <!-- Left Sidebar: Chat History (Friend's Feature) -->
+        <aside class="sidebar glass-panel border-r border-slate-300 dark:border-slate-800 flex flex-col h-full z-20 transition-colors">
+            <div class="p-4 border-b border-slate-300 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold">
+                        <i class="fa-solid fa-water"></i>
+                    </div>
+                    <span class="font-bold text-sm tracking-wide text-slate-900 dark:text-slate-100">FloatChat AI</span>
+                </div>
+                <button onclick="startNewChat()" title="New Chat"
+                    class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-cyan-600 dark:text-cyan-400 text-xs border border-slate-300 dark:border-slate-700 flex items-center gap-1 transition">
+                    <i class="fa-solid fa-plus"></i> New
+                </button>
             </div>
-            <div>
-                <h1 class="font-bold text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2 transition-colors">
-                    FloatChat AI <span
-                        class="text-xs bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">PS-19
-                        Engine</span>
-                </h1>
-                <p class="text-xs text-slate-500 dark:text-slate-400 transition-colors">Autonomous ARGO Ocean Data Discovery, Profiling & Visualization</p>
+
+            <div class="p-3 flex items-center justify-between">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-1">Recent Inquiries</span>
+                <span id="history-count" class="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">0</span>
             </div>
+
+            <!-- History List -->
+            <div id="history-list" class="flex-1 overflow-y-auto px-2 space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                <!-- Populated from ChromaDB -->
+            </div>
+
+            <div class="p-3 border-t border-slate-300 dark:border-slate-800 flex items-center justify-between text-xs">
+                <button onclick="clearAllHistory()"
+                    class="text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
+                    <i class="fa-regular fa-trash-can"></i> Clear All History
+                </button>
+                <span class="text-[10px] text-slate-500">PS-19 Engine</span>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <div class="flex-1 flex flex-col h-full overflow-hidden">
+            <!-- Header (Merged with Theme Toggle) -->
+            <header class="glass-panel px-6 py-3.5 flex items-center justify-between border-b border-slate-300 dark:border-slate-800 transition-colors z-10">
+                <div>
+                    <h2 class="font-semibold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        ARGO Ocean Intelligence Workspace
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">Global 5-Ocean Array</span>
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">In-situ Profiles, Hypoxia OMZ, Thermal Gradients & Physics Analytics</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
+                        <span>Active Telemetry Online</span>
+                    </div>
+                    <!-- Your Theme Toggle -->
+                    <button id="theme-toggle" class="w-9 h-9 rounded-full flex items-center justify-center bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-amber-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition shadow-sm border border-slate-300 dark:border-slate-700">
+                        <i id="theme-icon-moon" class="fa-solid fa-moon dark:hidden"></i>
+                        <i id="theme-icon-sun" class="fa-solid fa-sun hidden dark:block"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Message Thread -->
+            <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <div id="welcome-message" class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 dark:text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
+                        <i class="fa-solid fa-lightbulb"></i>
+                    </div>
+                    <!-- Dark/Light mode text classes added -->
+                    <div class="glass-panel p-4 text-sm text-blue-900 dark:text-slate-200 border-l-4 border-cyan-500 rounded-xl max-w-3xl transition-colors">
+                        <p class="font-semibold text-cyan-700 dark:text-cyan-400 mb-1">Session Initialized</p>
+                        <p>Enter any query across the 5 global oceans or select a past inquiry from the sidebar.</p>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Input Bar (Merged with Suggestions Container) -->
+            <footer class="p-4 glass-panel border-t border-slate-300 dark:border-slate-800 flex flex-col gap-3 transition-colors">
+                
+                <!-- Your Smart Suggestions Container -->
+                <div id="suggestions-container" class="max-w-4xl mx-auto flex flex-wrap gap-2 w-full empty:hidden transition-all duration-300">
+                </div>
+
+                <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-3 w-full">
+                    <input id="user-input" type="text"
+                        placeholder="Ask an oceanographic query (e.g. 'What is the average sea temperature at 100 dbar?')"
+                        class="flex-1 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition shadow-inner"
+                        autocomplete="off" required />
+                    <button type="submit" id="send-btn"
+                        class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
+                        <span>Execute</span>
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </form>
+            </footer>
         </div>
-        
-        <!-- NEW: Updated Right Side with Toggle Button -->
-        <div class="flex items-center gap-4">
-            <div class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 transition-colors">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
-                Real-Time GDAC / ARGO Stream Online
-            </div>
-            
-            <button id="theme-toggle" class="w-9 h-9 rounded-full flex items-center justify-center bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-amber-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition shadow-sm border border-slate-300 dark:border-slate-700">
-                <i id="theme-icon-moon" class="fa-solid fa-moon dark:hidden"></i>
-                <i id="theme-icon-sun" class="fa-solid fa-sun hidden dark:block"></i>
-            </button>
-        </div>
-    </header>
+    </div>
 
-    <!-- Chat Message Container -->
-    <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
-        <!-- Welcome Prompt -->
-        <div class="flex items-start space-x-3">
-            <div
-                class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 dark:text-amber-400 flex items-center justify-center text-sm border border-amber-500/30">
-                <i class="fa-solid fa-lightbulb"></i>
-            </div>
-            <!-- Notice the updated text-blue-900 dark:text-slate-200 here -->
-            <div class="chat-bubble glass-panel p-4 text-sm text-blue-900 dark:text-slate-200 border-l-4 border-cyan-500 transition-colors">
-                <p class="font-semibold text-cyan-700 dark:text-cyan-400 mb-1">Welcome to FloatChat AI</p>
-                <p>Ask anything about the ARGO Float global network, spatial coordinates, thermoclines, dead zones,
-                    extreme scenarios, or vertical depth profiling.</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- Input Bar -->
-<!-- 1. Notice the added classes: flex flex-col gap-3 -->
-    <footer class="p-4 glass-panel border-t border-slate-700/50 flex flex-col gap-3">
-        
-        <!-- 2. ADD THIS NEW DIV RIGHT HERE (Above the form) -->
-        <div id="suggestions-container" class="max-w-4xl mx-auto flex flex-wrap gap-2 w-full empty:hidden transition-all duration-300">
-            <!-- JavaScript will inject the suggestion buttons here -->
-        </div>
-
-        <!-- 3. Your form remains exactly the same, just add 'w-full' to the end of its class list -->
-        <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-3 w-full">
-            <input id="user-input" type="text"
-                placeholder="Type your ocean query (e.g. 'Plot vertical salinity profile down to 1500 dbar', 'Which float recorded lowest temp at 1000 dbar?')"
-                class="flex-1 bg-white dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition shadow-inner"
-                autocomplete="off" required />
-            <button type="submit" id="send-btn"
-                class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
-                <span>Send</span>
-                <i class="fa-solid fa-paper-plane"></i>
-            </button>
-        </form>
-    </footer>
-
-    <!-- Chat Logic & Plotly Downloader JS -->
+    <!-- Script Logic -->
     <script>
-        
+        const video = document.getElementById("ocean-bg");
+        if (video) {
+            video.muted = true;
+            video.volume = 0;
+            video.setAttribute("muted", "");
+            video.setAttribute("playsinline", "");
+            video.addEventListener("play", () => {
+                video.muted = true;
+                video.volume = 0;
+            });
+        }
+
         const chatBox = document.getElementById('chat-box');
         const chatForm = document.getElementById('chat-form');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
+        const historyList = document.getElementById('history-list');
+        const historyCount = document.getElementById('history-count');
+        const suggestionsContainer = document.getElementById('suggestions-container');
 
         // --- THEME TOGGLE LOGIC ---
         const themeToggleBtn = document.getElementById('theme-toggle');
         const htmlElement = document.documentElement;
 
-        // Check local storage or system preference on load
         if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             htmlElement.classList.add('dark');
         } else {
             htmlElement.classList.remove('dark');
         }
 
-        // Toggle theme on click
         themeToggleBtn.addEventListener('click', () => {
             htmlElement.classList.toggle('dark');
-            
-            // Save preference to localStorage
             if (htmlElement.classList.contains('dark')) {
                 localStorage.setItem('theme', 'dark');
             } else {
                 localStorage.setItem('theme', 'light');
             }
         });
-        // ---------------
+
+        // --- SIDEBAR HISTORY LOGIC ---
+        let dbHistory = [];
+
+        async function loadHistoryFromDB() {
+            try {
+                const res = await fetch('/history');
+                const data = await res.json();
+                dbHistory = data.history || [];
+                renderHistorySidebar();
+            } catch (e) {
+                console.error("Failed to load ChromaDB history:", e);
+            }
+        }
+
+        function renderHistorySidebar() {
+            historyList.innerHTML = '';
+            historyCount.textContent = dbHistory.length;
+
+            if (dbHistory.length === 0) {
+                historyList.innerHTML = '<div class="p-3 text-slate-500 text-center text-[11px]">No stored inquiries in ChromaDB.</div>';
+                return;
+            }
+
+            dbHistory.slice().reverse().forEach((item, idx) => {
+                const actualIdx = dbHistory.length - 1 - idx;
+                const el = document.createElement('div');
+                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800/80 cursor-pointer transition border border-transparent hover:border-slate-300 dark:hover:border-slate-700/60";
+                el.innerHTML = `
+                    <div class="flex items-center gap-2 flex-1 min-w-0 pr-2" onclick="displaySavedSession(${actualIdx})">
+                        <i class="fa-regular fa-message text-cyan-600 dark:text-cyan-400 text-xs"></i>
+                        <span class="truncate font-medium">${item.prompt}</span>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 p-1 transition">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                `;
+                historyList.appendChild(el);
+            });
+        }
+
+        function displaySavedSession(index) {
+            const session = dbHistory[index];
+            if (!session) return;
+            chatBox.innerHTML = '';
+            appendUserMessage(session.prompt, session.time);
+            appendBotMessage(session.reply, session.chart, session.time);
+        }
+
+        async function deleteDbSession(entryId) {
+            try {
+                await fetch(`/history/${entryId}`, { method: 'DELETE' });
+                await loadHistoryFromDB();
+            } catch (e) {
+                console.error("Delete error:", e);
+            }
+        }
+
+        async function clearAllHistory() {
+            try {
+                await fetch('/history/clear', { method: 'POST' });
+                dbHistory = [];
+                renderHistorySidebar();
+                startNewChat();
+            } catch (e) {
+                console.error("Clear error:", e);
+            }
+        }
+
+        function startNewChat() {
+            location.reload();
+        }
 
         function scrollToBottom() {
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        function appendUserMessage(text) {
-            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // --- MESSAGE RENDERING LOGIC ---
+        function appendUserMessage(text, timestamp) {
+            const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const msgHtml = `
                 <div class="flex justify-end">
-                    <div class="bg-blue-600 text-white chat-bubble p-4 text-sm shadow-md">
+                    <div class="bg-blue-600 text-white p-4 text-sm rounded-2xl max-w-2xl shadow-md">
                         <p>${text}</p>
                         <span class="block text-right text-[10px] text-blue-200 mt-1">${time}</span>
                     </div>
@@ -185,8 +302,8 @@
             scrollToBottom();
         }
 
-        function appendBotMessage(replyHtml, chartJson) {
-            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        function appendBotMessage(replyHtml, chartJson, timestamp) {
+            const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
 
             let contentHtml = `
@@ -194,15 +311,13 @@
                     <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 dark:text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
                         <i class="fa-solid fa-lightbulb"></i>
                     </div>
-                    <div class="chat-bubble glass-panel p-4 text-sm border-l-4 border-cyan-500 w-full transition-colors">
-                        <!-- Updated text colors below -->
-                        <div class="prose prose-invert max-w-none text-blue-900 dark:text-slate-200 text-sm">${replyHtml}</div>
+                    <div class="glass-panel p-4 text-sm border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md transition-colors">
+                        <div class="prose prose-invert max-w-none text-blue-900 dark:text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
                         <span class="block text-left text-[10px] text-blue-500 dark:text-slate-400 mt-2">${time}</span>
                         ${chartJson ? `
                             <div class="mt-4 pt-3 border-t border-slate-300 dark:border-slate-700/60">
-                                <!-- Download Toolbar -->
                                 <div class="flex items-center justify-between mb-2">
-                                    <span class="text-xs text-blue-700 dark:text-slate-400 font-medium"><i class="fa-solid fa-chart-line text-cyan-600 dark:text-cyan-400 mr-1"></i> Interactive Visualization</span>
+                                    <span class="text-xs text-blue-700 dark:text-slate-400 font-medium"><i class="fa-solid fa-chart-line text-cyan-600 dark:text-cyan-400 mr-1"></i> Rendered Telemetry Plot</span>
                                     <div class="flex gap-2">
                                         <button onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-cyan-600 dark:text-cyan-400 px-2.5 py-1 rounded border border-slate-300 dark:border-slate-600 flex items-center gap-1 transition">
                                             <i class="fa-solid fa-download"></i> PNG
@@ -212,7 +327,7 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div id="${chartId}" class="w-full min-h-[380px] rounded-lg overflow-hidden"></div>
+                                <div id="${chartId}" class="plot-container rounded-lg overflow-hidden"></div>
                             </div>
                         ` : ''}
                     </div>
@@ -221,59 +336,43 @@
             chatBox.insertAdjacentHTML('beforeend', contentHtml);
 
             if (chartJson) {
-                try {
-                    const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
-
-                    const config = {
-                        responsive: true,
-                        displayModeBar: true,
-                        displaylogo: false,
-                        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-                        toImageButtonOptions: {
-                            format: 'png',
-                            filename: 'floatchat_argo_plot',
-                            height: 700,
-                            width: 1000,
-                            scale: 2
-                        }
-                    };
-
-                    Plotly.newPlot(chartId, plotData.data, plotData.layout, config);
-                } catch (e) {
-                    console.error("Plotly rendering error:", e);
-                }
+                setTimeout(() => {
+                    try {
+                        const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
+                        const config = {
+                            responsive: true,
+                            displayModeBar: true,
+                            displaylogo: false,
+                            modeBarButtonsToRemove: ['lasso2d', 'select2d']
+                        };
+                        Plotly.newPlot(chartId, plotData.data, plotData.layout, config).then(() => {
+                            Plotly.Plots.resize(document.getElementById(chartId));
+                        });
+                    } catch (e) {
+                        console.error("Plotly render error:", e);
+                    }
+                }, 50);
             }
-
             scrollToBottom();
         }
 
         function downloadChartImage(chartId, format) {
             const chartDiv = document.getElementById(chartId);
             if (chartDiv) {
-                Plotly.downloadImage(chartDiv, {
-                    format: format,
-                    width: 1200,
-                    height: 800,
-                    filename: 'floatchat_argo_' + format.toUpperCase()
-                });
+                Plotly.downloadImage(chartDiv, { format: format, width: 1200, height: 800, filename: 'floatchat_' + format.toUpperCase() });
             }
         }
-        const suggestionsContainer = document.getElementById('suggestions-container');
 
-        // NEW: Fetch suggestions from backend
+        // --- SMART SUGGESTIONS LOGIC ---
         async function fetchSmartSuggestions(lastReply) {
-            suggestionsContainer.innerHTML = ''; // Clear old suggestions
-            
+            suggestionsContainer.innerHTML = '';
             try {
-                // Strip HTML tags from the bot's reply for a cleaner LLM prompt
                 const plainTextReply = lastReply.replace(/<[^>]*>?/gm, '').substring(0, 500); 
-                
                 const response = await fetch('/suggest', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ last_reply: plainTextReply })
                 });
-                
                 const data = await response.json();
                 if (data.suggestions && data.suggestions.length > 0) {
                     renderSuggestions(data.suggestions);
@@ -283,40 +382,40 @@
             }
         }
 
-        // NEW: Render suggestion buttons
         function renderSuggestions(suggestions) {
             suggestionsContainer.innerHTML = '';
             suggestions.forEach(sugg => {
                 const btn = document.createElement('button');
-                btn.className = 'text-xs bg-slate-800/80 hover:bg-cyan-600/50 text-cyan-300 px-3 py-1.5 rounded-full border border-cyan-500/30 transition-all shadow-sm text-left truncate max-w-[250px] flex-shrink-0';
+                btn.className = 'text-xs bg-white dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-cyan-600/50 text-blue-700 dark:text-cyan-300 px-3 py-1.5 rounded-full border border-slate-300 dark:border-cyan-500/30 transition-all shadow-sm text-left truncate max-w-[250px] flex-shrink-0';
                 btn.textContent = sugg;
                 btn.type = 'button';
                 btn.onclick = () => {
                     userInput.value = sugg;
-                    suggestionsContainer.innerHTML = ''; // Hide suggestions immediately
+                    suggestionsContainer.innerHTML = '';
                     chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
                 };
                 suggestionsContainer.appendChild(btn);
             });
         }
+
+        // --- CHAT SUBMIT LOGIC ---
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = userInput.value.trim();
             if (!message) return;
 
-            appendUserMessage(message);
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            appendUserMessage(message, timeStr);
             userInput.value = '';
             sendBtn.disabled = true;
 
-            // Loading state
             const loadingId = 'loading-' + Date.now();
-            const loadingHtml = `
-                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-400 text-xs py-2">
+            chatBox.insertAdjacentHTML('beforeend', `
+                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-600 dark:text-cyan-400 text-xs py-2">
                     <i class="fa-solid fa-spinner fa-spin text-sm"></i>
-                    <span>Analyzing ARGO telemetry & generating profiles...</span>
+                    <span>Processing in-situ profile data & telemetry...</span>
                 </div>
-            `;
-            chatBox.insertAdjacentHTML('beforeend', loadingHtml);
+            `);
             scrollToBottom();
 
             try {
@@ -325,23 +424,28 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: message })
                 });
-
                 const data = await response.json();
                 document.getElementById(loadingId)?.remove();
                 
                 const botReply = data.reply || data.answer;
-                appendBotMessage(botReply, data.chart);
                 
-                // NEW: Trigger smart suggestions generator based on the response
+                // Append the bot message and chart using your friend's updated function
+                appendBotMessage(botReply, data.chart, timeStr);
+                
+                // Trigger your smart suggestions generator based on the response
                 fetchSmartSuggestions(botReply || "Ocean data analysis complete.");
                 
+                // Trigger your friend's DB update
+                await loadHistoryFromDB();
             } catch (err) {
                 document.getElementById(loadingId)?.remove();
-                appendBotMessage("⚠️ Error: Unable to retrieve data from server. Please check local Flask connection.", null);
+                appendBotMessage("⚠️ Error: Server connection failed.", null, timeStr);
             } finally {
                 sendBtn.disabled = false;
             }
         });
+
+        document.addEventListener('DOMContentLoaded', loadHistoryFromDB);
     </script>
 </body>
 
