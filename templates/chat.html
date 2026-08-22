@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloatChat AI - ARGO Ocean Data Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .chat-bubble {
+            max-width: 88%;
+            border-radius: 1rem;
+        }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- Header -->
+    <header class="glass-panel px-6 py-4 flex items-center justify-between z-10 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div
+                class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl border border-cyan-500/30">
+                <i class="fa-solid fa-water"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg text-slate-100 flex items-center gap-2">
+                    FloatChat AI <span
+                        class="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">PS-19
+                        Engine</span>
+                </h1>
+                <p class="text-xs text-slate-400">Autonomous ARGO Ocean Data Discovery, Profiling & Visualization</p>
+            </div>
+        </div>
+        <div class="text-xs text-slate-400 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Real-Time GDAC / ARGO Stream Online
+        </div>
+    </header>
+
+    <!-- Chat Message Container -->
+    <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
+        <!-- Welcome Prompt -->
+        <div class="flex items-start space-x-3">
+            <div
+                class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/30">
+                <i class="fa-solid fa-lightbulb"></i>
+            </div>
+            <div class="chat-bubble glass-panel p-4 text-sm text-slate-200 border-l-4 border-cyan-500">
+                <p class="font-semibold text-cyan-400 mb-1">Welcome to FloatChat AI</p>
+                <p>Ask anything about the ARGO Float global network, spatial coordinates, thermoclines, dead zones,
+                    extreme scenarios, or vertical depth profiling.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Input Bar -->
+    <footer class="p-4 glass-panel border-t border-slate-700/50">
+        <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-3">
+            <input id="user-input" type="text"
+                placeholder="Type your ocean query (e.g. 'Plot vertical salinity profile down to 1500 dbar', 'Which float recorded lowest temp at 1000 dbar?')"
+                class="flex-1 bg-slate-800/90 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+                autocomplete="off" required />
+            <button type="submit" id="send-btn"
+                class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
+                <span>Send</span>
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </form>
+    </footer>
+
+    <!-- Chat Logic & Plotly Downloader JS -->
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        function scrollToBottom() {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function appendUserMessage(text) {
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const msgHtml = `
+                <div class="flex justify-end">
+                    <div class="bg-blue-600 text-white chat-bubble p-4 text-sm shadow-md">
+                        <p>${text}</p>
+                        <span class="block text-right text-[10px] text-blue-200 mt-1">${time}</span>
+                    </div>
+                </div>
+            `;
+            chatBox.insertAdjacentHTML('beforeend', msgHtml);
+            scrollToBottom();
+        }
+
+        function appendBotMessage(replyHtml, chartJson) {
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
+
+            let contentHtml = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
+                        <i class="fa-solid fa-lightbulb"></i>
+                    </div>
+                    <div class="chat-bubble glass-panel p-4 text-sm text-slate-200 border-l-4 border-cyan-500 w-full">
+                        <div class="prose prose-invert max-w-none text-slate-200 text-sm">${replyHtml}</div>
+                        <span class="block text-left text-[10px] text-slate-400 mt-2">${time}</span>
+                        ${chartJson ? `
+                            <div class="mt-4 pt-3 border-t border-slate-700/60">
+                                <!-- Download Toolbar -->
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-400 font-medium"><i class="fa-solid fa-chart-line text-cyan-400 mr-1"></i> Interactive Visualization</span>
+                                    <div class="flex gap-2">
+                                        <button onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                            <i class="fa-solid fa-download"></i> PNG
+                                        </button>
+                                        <button onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-slate-800 hover:bg-slate-700 text-purple-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                            <i class="fa-solid fa-file-code"></i> SVG
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="${chartId}" class="w-full min-h-[380px] rounded-lg overflow-hidden"></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            chatBox.insertAdjacentHTML('beforeend', contentHtml);
+
+            if (chartJson) {
+                try {
+                    const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
+
+                    const config = {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                        toImageButtonOptions: {
+                            format: 'png',
+                            filename: 'floatchat_argo_plot',
+                            height: 700,
+                            width: 1000,
+                            scale: 2
+                        }
+                    };
+
+                    Plotly.newPlot(chartId, plotData.data, plotData.layout, config);
+                } catch (e) {
+                    console.error("Plotly rendering error:", e);
+                }
+            }
+
+            scrollToBottom();
+        }
+
+        function downloadChartImage(chartId, format) {
+            const chartDiv = document.getElementById(chartId);
+            if (chartDiv) {
+                Plotly.downloadImage(chartDiv, {
+                    format: format,
+                    width: 1200,
+                    height: 800,
+                    filename: 'floatchat_argo_' + format.toUpperCase()
+                });
+            }
+        }
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            appendUserMessage(message);
+            userInput.value = '';
+            sendBtn.disabled = true;
+
+            // Loading state
+            const loadingId = 'loading-' + Date.now();
+            const loadingHtml = `
+                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-400 text-xs py-2">
+                    <i class="fa-solid fa-spinner fa-spin text-sm"></i>
+                    <span>Analyzing ARGO telemetry & generating profiles...</span>
+                </div>
+            `;
+            chatBox.insertAdjacentHTML('beforeend', loadingHtml);
+            scrollToBottom();
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+                document.getElementById(loadingId)?.remove();
+                appendBotMessage(data.reply || data.answer, data.chart);
+            } catch (err) {
+                document.getElementById(loadingId)?.remove();
+                appendBotMessage("⚠️ Error: Unable to retrieve data from server. Please check local Flask connection.", null);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
