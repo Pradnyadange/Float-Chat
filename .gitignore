@@ -1,6 +1,9 @@
 venv/
 venv_backup/
 __pycache__/
+*.pyc
+*.log
+.env
 *.sqlite3
 *.db
 chroma_db/
