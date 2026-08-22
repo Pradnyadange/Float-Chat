@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloatChat AI - ARGO Ocean Data Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #0b1120;
+            color: #f8fafc;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .sidebar {
+            width: 300px;
+            transition: all 0.3s ease;
+        }
+
+        .plot-container {
+            width: 100% !important;
+            min-height: 420px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        .recording-pulse {
+            animation: pulse-red 1.5s infinite;
+        }
+
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
+    </style>
+</head>
+
+<body class="flex h-screen overflow-hidden">
+
+    <!-- Left Sidebar: Chat History -->
+    <aside class="sidebar glass-panel border-r border-slate-800 flex flex-col h-full z-20">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                    <i class="fa-solid fa-water"></i>
+                </div>
+                <span class="font-bold text-sm tracking-wide text-slate-100">FloatChat AI</span>
+            </div>
+            <button onclick="startNewChat()" title="New Chat"
+                class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs border border-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-plus"></i> New
+            </button>
+        </div>
+
+        <div class="p-3 flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1">Recent Inquiries</span>
+            <span id="history-count" class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">0</span>
+        </div>
+
+        <!-- History List -->
+        <div id="history-list" class="flex-1 overflow-y-auto px-2 space-y-1 text-xs text-slate-300">
+            <!-- Populated dynamically from ChromaDB per user session -->
+        </div>
+
+        <!-- Sidebar Footer: User, Clear, Logout -->
+        <div class="p-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <button onclick="clearAllHistory()"
+                class="text-rose-400 hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
+                <i class="fa-regular fa-trash-can"></i> Clear History
+            </button>
+            <div class="flex items-center gap-2">
+                <span class="text-[11px] text-cyan-400 font-medium truncate max-w-[80px]" title="{{ current_user }}">
+                    <i class="fa-solid fa-user-circle mr-0.5"></i> {{ current_user or 'User' }}
+                </span>
+                <a href="/logout" title="Sign Out"
+                    class="text-slate-400 hover:text-rose-400 transition flex items-center gap-1 text-[11px]">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden">
+        <!-- Header -->
+        <header class="glass-panel px-6 py-3.5 flex items-center justify-between border-b border-slate-800">
+            <div>
+                <h2 class="font-semibold text-sm text-slate-100 flex items-center gap-2">
+                    ARGO Multimodal Intelligence Workspace
+                    <span
+                        class="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">Voice
+                        + Telemetry Upload + Text</span>
+                </h2>
+                <p class="text-xs text-slate-400">In-situ Profiles, Hypoxia OMZ, Thermal Gradients & Data Pipeline</p>
+            </div>
+            <div class="text-xs text-slate-400 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Active Telemetry Online</span>
+            </div>
+        </header>
+
+        <!-- Message Thread -->
+        <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
+            <div id="welcome-message" class="flex items-start space-x-3">
+                <div
+                    class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
+                    <i class="fa-solid fa-lightbulb"></i>
+                </div>
+                <div class="glass-panel p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl max-w-3xl">
+                    <p class="font-semibold text-cyan-400 mb-1">Multimodal Workspace Ready</p>
+                    <p class="text-xs text-slate-300">Interact using any input mode:</p>
+                    <ul class="list-disc ml-5 mt-2 space-y-1 text-slate-400 text-xs">
+                        <li><strong>Text:</strong> Type natural oceanographic questions or geographic coordinates.</li>
+                        <li><strong>Voice:</strong> Click the microphone icon to speak directly.</li>
+                        <li><strong>File Upload:</strong> Attach `.csv`, `.nc`, `.txt`, `.json`, or `.pdf` (including
+                            handwritten scans).</li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+
+        <!-- Staged File Banner -->
+        <div id="file-preview-banner"
+            class="hidden px-6 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-cyan-400">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-file-lines"></i>
+                <span id="staged-file-name" class="font-medium text-slate-200"></span>
+                <span id="staged-file-size" class="text-[10px] text-slate-500"></span>
+            </div>
+            <button onclick="removeStagedFile()" class="text-slate-400 hover:text-rose-400 transition">
+                <i class="fa-solid fa-xmark"></i> Remove
+            </button>
+        </div>
+
+        <!-- Input Bar with Voice & Attachment Controls -->
+        <footer class="p-4 glass-panel border-t border-slate-800">
+            <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-2">
+                <!-- Hidden File Input -->
+                <input type="file" id="file-input" class="hidden" accept=".csv,.txt,.json,.nc,.dat,.pdf,.png,.jpg,.jpeg"
+                    onchange="handleFileSelected(event)" />
+
+                <!-- Attachment Button -->
+                <button type="button" onclick="document.getElementById('file-input').click()"
+                    title="Attach Ocean Dataset or Handwritten Scan (.pdf, .png, .jpg, .csv, .json)"
+                    class="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 rounded-xl border border-slate-700 transition">
+                    <i class="fa-solid fa-paperclip text-sm"></i>
+                </button>
+
+                <!-- Voice Recording Button -->
+                <button type="button" id="mic-btn" onclick="toggleVoiceRecording()" title="Voice Input (Click to speak)"
+                    class="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 rounded-xl border border-slate-700 transition">
+                    <i id="mic-icon" class="fa-solid fa-microphone text-sm"></i>
+                </button>
+
+                <!-- Text Query Field -->
+                <input id="user-input" type="text"
+                    placeholder="Ask or speak an ocean query (e.g. 'What is the average temperature at 100 dbar?')"
+                    class="flex-1 bg-slate-900/90 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+                    autocomplete="off" />
+
+                <!-- Send Button -->
+                <button type="submit" id="send-btn"
+                    class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
+                    <span>Execute</span>
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <!-- Script Logic -->
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const historyList = document.getElementById('history-list');
+        const historyCount = document.getElementById('history-count');
+        const fileInput = document.getElementById('file-input');
+        const fileBanner = document.getElementById('file-preview-banner');
+        const stagedFileName = document.getElementById('staged-file-name');
+        const stagedFileSize = document.getElementById('staged-file-size');
+        const micBtn = document.getElementById('mic-btn');
+        const micIcon = document.getElementById('mic-icon');
+
+        let dbHistory = [];
+        let stagedFile = null;
+        let isRecording = false;
+        let recognition = null;
+
+        // =========================================================================
+        // VOICE INPUT (WEB SPEECH API)
+        // =========================================================================
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function () {
+                isRecording = true;
+                micBtn.classList.add('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
+                micIcon.className = "fa-solid fa-microphone-lines text-rose-400";
+                userInput.placeholder = "Listening to oceanographic query...";
+            };
+
+            recognition.onresult = function (event) {
+                const transcript = event.results[0][0].transcript;
+                userInput.value = transcript;
+                stopVoiceRecording();
+            };
+
+            recognition.onerror = function (event) {
+                console.error("Speech Recognition Error:", event.error);
+                stopVoiceRecording();
+            };
+
+            recognition.onend = function () {
+                stopVoiceRecording();
+            };
+        } else {
+            micBtn.title = "Voice recognition is not supported in this browser.";
+        }
+
+        function toggleVoiceRecording() {
+            if (!recognition) {
+                alert("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+                return;
+            }
+            if (isRecording) {
+                recognition.stop();
+                stopVoiceRecording();
+            } else {
+                recognition.start();
+            }
+        }
+
+        function stopVoiceRecording() {
+            isRecording = false;
+            micBtn.classList.remove('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
+            micIcon.className = "fa-solid fa-microphone text-slate-300";
+            userInput.placeholder = "Ask or speak an ocean query (e.g. 'What is the average temperature at 100 dbar?')";
+        }
+
+        // =========================================================================
+        // FILE HANDLING
+        // =========================================================================
+        function handleFileSelected(e) {
+            const file = e.target.files[0];
+            if (file) {
+                stagedFile = file;
+                stagedFileName.textContent = file.name;
+                stagedFileSize.textContent = `(${(file.size / 1024).toFixed(1)} KB)`;
+                fileBanner.classList.remove('hidden');
+                userInput.focus();
+            }
+        }
+
+        function removeStagedFile() {
+            stagedFile = null;
+            fileInput.value = '';
+            fileBanner.classList.add('hidden');
+        }
+
+        // =========================================================================
+        // CHAT & CHROMA PERSISTENCE
+        // =========================================================================
+        async function loadHistoryFromDB() {
+            try {
+                const res = await fetch('/history');
+                if (res.redirected) {
+                    window.location.href = res.url;
+                    return;
+                }
+                const data = await res.json();
+                dbHistory = data.history || [];
+                renderHistorySidebar();
+            } catch (e) {
+                console.error("Failed to load ChromaDB history:", e);
+            }
+        }
+
+        function renderHistorySidebar() {
+            historyList.innerHTML = '';
+            historyCount.textContent = dbHistory.length;
+
+            if (dbHistory.length === 0) {
+                historyList.innerHTML = '<div class="p-3 text-slate-500 text-center text-[11px]">No saved sessions found.</div>';
+                return;
+            }
+
+            dbHistory.slice().reverse().forEach((item, idx) => {
+                const actualIdx = dbHistory.length - 1 - idx;
+                const el = document.createElement('div');
+                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-800/80 cursor-pointer transition text-slate-300 border border-transparent hover:border-slate-700/60";
+                el.innerHTML = `
+                    <div class="flex items-center gap-2 flex-1 min-w-0 pr-2" onclick="displaySavedSession(${actualIdx})">
+                        <i class="fa-regular fa-message text-cyan-400 text-xs"></i>
+                        <span class="truncate font-medium">${item.prompt}</span>
+                    </div>
+                    <button onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                `;
+                historyList.appendChild(el);
+            });
+        }
+
+        function displaySavedSession(index) {
+            const session = dbHistory[index];
+            if (!session) return;
+            chatBox.innerHTML = '';
+            appendUserMessage(session.prompt, session.time);
+            appendBotMessage(session.reply, session.chart, session.time);
+        }
+
+        async function deleteDbSession(entryId) {
+            try {
+                await fetch(`/history/${entryId}`, { method: 'DELETE' });
+                await loadHistoryFromDB();
+            } catch (e) {
+                console.error("Delete error:", e);
+            }
+        }
+
+        async function clearAllHistory() {
+            try {
+                await fetch('/history/clear', { method: 'POST' });
+                dbHistory = [];
+                renderHistorySidebar();
+                startNewChat();
+            } catch (e) {
+                console.error("Clear error:", e);
+            }
+        }
+
+        function appendUserMessage(text, timestamp, attachedFileName = null) {
+            const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const fileBadge = attachedFileName ? `
+                <div class="inline-flex items-center gap-1.5 bg-blue-700/80 text-[11px] px-2.5 py-1 rounded-md mb-2 border border-blue-400/30">
+                    <i class="fa-solid fa-paperclip"></i>
+                    <span>Attached: ${attachedFileName}</span>
+                </div><br>
+            ` : '';
+
+            const msgHtml = `
+                <div class="flex justify-end">
+                    <div class="bg-blue-600 text-white p-4 text-sm rounded-2xl max-w-2xl shadow-md">
+                        ${fileBadge}
+                        <p>${text || (attachedFileName ? 'Uploaded dataset for analysis.' : '')}</p>
+                        <span class="block text-right text-[10px] text-blue-200 mt-1">${time}</span>
+                    </div>
+                </div>
+            `;
+            chatBox.insertAdjacentHTML('beforeend', msgHtml);
+            scrollToBottom();
+        }
+
+        function appendBotMessage(replyHtml, chartJson, timestamp) {
+            const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
+
+            let contentHtml = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 flex-shrink-0">
+                        <i class="fa-solid fa-lightbulb"></i>
+                    </div>
+                    <div class="glass-panel p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md">
+                        <div class="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
+                        <span class="block text-left text-[10px] text-slate-400 mt-2">${time}</span>
+                        ${chartJson ? `
+                            <div class="mt-4 pt-3 border-t border-slate-700/60">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs text-slate-400 font-medium"><i class="fa-solid fa-chart-line text-cyan-400 mr-1"></i> Rendered Telemetry Plot</span>
+                                    <div class="flex gap-2">
+                                        <button onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                            <i class="fa-solid fa-download"></i> PNG
+                                        </button>
+                                        <button onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-slate-800 hover:bg-slate-700 text-purple-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                            <i class="fa-solid fa-file-code"></i> SVG
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="${chartId}" class="plot-container rounded-lg overflow-hidden"></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            chatBox.insertAdjacentHTML('beforeend', contentHtml);
+
+            if (chartJson) {
+                setTimeout(() => {
+                    try {
+                        const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
+                        const config = {
+                            responsive: true,
+                            displayModeBar: true,
+                            displaylogo: false,
+                            modeBarButtonsToRemove: ['lasso2d', 'select2d']
+                        };
+                        Plotly.newPlot(chartId, plotData.data, plotData.layout, config).then(() => {
+                            Plotly.Plots.resize(document.getElementById(chartId));
+                        });
+                    } catch (e) {
+                        console.error("Plotly render error:", e);
+                    }
+                }, 50);
+            }
+            scrollToBottom();
+        }
+
+        function downloadChartImage(chartId, format) {
+            const chartDiv = document.getElementById(chartId);
+            if (chartDiv) {
+                Plotly.downloadImage(chartDiv, { format: format, width: 1200, height: 800, filename: 'floatchat_' + format.toUpperCase() });
+            }
+        }
+
+        function startNewChat() {
+            location.reload();
+        }
+
+        function scrollToBottom() {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // =========================================================================
+        // FORM SUBMISSION (TEXT + MULTIPART FILE UPLOAD)
+        // =========================================================================
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            const currentFile = stagedFile;
+
+            if (!message && !currentFile) return;
+
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            appendUserMessage(message, timeStr, currentFile ? currentFile.name : null);
+
+            userInput.value = '';
+            removeStagedFile();
+            sendBtn.disabled = true;
+
+            const loadingId = 'loading-' + Date.now();
+            chatBox.insertAdjacentHTML('beforeend', `
+                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-400 text-xs py-2">
+                    <i class="fa-solid fa-spinner fa-spin text-sm"></i>
+                    <span>Analyzing multimodal input & oceanographic data...</span>
+                </div>
+            `);
+            scrollToBottom();
+
+            try {
+                let response;
+                if (currentFile) {
+                    const formData = new FormData();
+                    formData.append('message', message);
+                    formData.append('file', currentFile);
+
+                    response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    response = await fetch('/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: message })
+                    });
+                }
+
+                if (response.redirected) {
+                    window.location.href = response.url;
+                    return;
+                }
+
+                const data = await response.json();
+                document.getElementById(loadingId)?.remove();
+
+                appendBotMessage(data.reply || data.answer, data.chart, timeStr);
+                await loadHistoryFromDB();
+            } catch (err) {
+                document.getElementById(loadingId)?.remove();
+                appendBotMessage("⚠️ Error: Multimodal pipeline failed to process request.", null);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', loadHistoryFromDB);
+    </script>
+</body>
+
+</html>
