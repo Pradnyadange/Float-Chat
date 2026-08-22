@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloatChat AI - Authentication</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #0b1120;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .glass-card {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center min-h-screen p-4 text-slate-100">
+
+    <div class="glass-card w-full max-w-md p-8 rounded-2xl shadow-2xl relative overflow-hidden">
+        <!-- Brand Header -->
+        <div class="flex flex-col items-center mb-6">
+            <div
+                class="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-2xl mb-3 border border-cyan-500/30">
+                <i class="fa-solid fa-water"></i>
+            </div>
+            <h1 class="text-xl font-bold tracking-wide text-white">FloatChat AI</h1>
+            <p class="text-xs text-slate-400 mt-1">Autonomous Ocean Intelligence & Telemetry Portal</p>
+        </div>
+
+        <!-- Notification Banner -->
+        <div id="alert-box" class="hidden p-3 mb-4 rounded-xl text-xs font-medium border"></div>
+
+        <!-- Auth Tabs -->
+        <div class="flex bg-slate-900/80 p-1 rounded-xl mb-6 border border-slate-800">
+            <button id="tab-login" onclick="switchAuthMode('login')"
+                class="flex-1 py-2 text-xs font-semibold rounded-lg bg-cyan-600 text-white transition shadow">
+                Sign In
+            </button>
+            <button id="tab-register" onclick="switchAuthMode('register')"
+                class="flex-1 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition">
+                Register
+            </button>
+        </div>
+
+        <!-- Form -->
+        <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1.5">Username</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 text-xs">
+                        <i class="fa-solid fa-user"></i>
+                    </span>
+                    <input type="text" id="username" required placeholder="Enter username"
+                        class="w-full pl-9 pr-4 py-2.5 bg-slate-900/90 text-sm text-slate-100 placeholder-slate-500 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-300 mb-1.5">Password</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 text-xs">
+                        <i class="fa-solid fa-lock"></i>
+                    </span>
+                    <input type="password" id="password" required placeholder="••••••••"
+                        class="w-full pl-9 pr-4 py-2.5 bg-slate-900/90 text-sm text-slate-100 placeholder-slate-500 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition">
+                </div>
+            </div>
+
+            <!-- Remember me / persistent login note -->
+            <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked id="remember"
+                        class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+                    <span>Keep me logged in</span>
+                </label>
+            </div>
+
+            <button type="submit" id="submit-btn"
+                class="w-full mt-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
+                <span id="btn-text">Sign In</span>
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        let currentMode = 'login';
+        const alertBox = document.getElementById('alert-box');
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+        const btnText = document.getElementById('btn-text');
+
+        function switchAuthMode(mode) {
+            currentMode = mode;
+            alertBox.classList.add('hidden');
+            if (mode === 'login') {
+                tabLogin.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-cyan-600 text-white transition shadow";
+                tabRegister.className = "flex-1 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition";
+                btnText.textContent = "Sign In";
+            } else {
+                tabRegister.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-cyan-600 text-white transition shadow";
+                tabLogin.className = "flex-1 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition";
+                btnText.textContent = "Create Account";
+            }
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            const endpoint = currentMode === 'login' ? '/api/login' : '/api/register';
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    alertBox.className = "p-3 mb-4 rounded-xl text-xs font-medium border bg-emerald-950/60 border-emerald-500/40 text-emerald-300 block";
+                    alertBox.textContent = data.message || "Authentication successful! Redirecting...";
+                    setTimeout(() => {
+                        window.location.href = "/";
+                    }, 600);
+                } else {
+                    alertBox.className = "p-3 mb-4 rounded-xl text-xs font-medium border bg-rose-950/60 border-rose-500/40 text-rose-300 block";
+                    alertBox.textContent = data.error || "Authentication failed.";
+                }
+            } catch (err) {
+                alertBox.className = "p-3 mb-4 rounded-xl text-xs font-medium border bg-rose-950/60 border-rose-500/40 text-rose-300 block";
+                alertBox.textContent = "Server connection error.";
+            }
+        }
+    </script>
+</body>
+
+</html>
