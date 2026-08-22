@@ -22,6 +22,7 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from groq import Groq
 from argo_service import fetch_region_data
+import requests
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "argo_super_secret_session_key_2026_x89")
@@ -1103,6 +1104,62 @@ def chat():
         print(f"Server Error handling query:\n{traceback.format_exc()}")
         return jsonify({"reply": f"⚠️ Internal Server Error: {str(err)}", "chart": None})
 
-
+@app.route('/suggest', methods=['POST'])
+def suggest_queries():
+    """Generates smart follow-up suggestions based on the last bot reply."""
+    data = request.get_json()
+    last_reply = data.get('last_reply', '')
+    
+    headers = {
+        "Authorization": f"Bearer {os.environ.get('GROQ_API_KEY')}",
+        "Content-Type": "application/json"
+    }
+    
+    # Prompting the LLM to return a strict JSON array of 3 short questions
+    payload = {
+        "model": "openai/gpt-oss-20b", 
+        "messages": [
+            {
+                "role": "system", 
+                "content": "You are a helpful assistant for an ARGO ocean data explorer. Based on the last response provided, suggest 3 short, relevant follow-up questions the user could ask. Return ONLY a valid JSON list of strings, e.g., [\"question 1\", \"question 2\", \"question 3\"]. Do not include any markdown formatting or extra text."
+            },
+            {
+                "role": "user", 
+                "content": f"Last response: {last_reply}"
+            }
+        ],
+        "temperature": 0.5
+    }
+    
+    try:
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+        
+        # Check if the API returned an error status code (e.g., 400, 401, 404)
+        if response.status_code != 200:
+            print(f"Groq API Error: {response.status_code} - {response.text}")
+            return jsonify({"suggestions": [
+                "Show me the salinity profile.", 
+                "What is the average temperature?", 
+                "Which float reached the lowest depth?"
+            ]})
+            
+        content = response.json()['choices'][0]['message']['content']
+        
+        # Clean up output in case the LLM wraps it in markdown blocks
+        content = content.replace('```json', '').replace('```', '').strip()
+        suggestions = json.loads(content)
+        
+        return jsonify({"suggestions": suggestions[:3]})
+    except Exception as e:
+        print(f"Error generating suggestions: {e}")
+        # Fallback suggestions in case the API fails
+        return jsonify({"suggestions": [
+            "Show me the salinity profile.", 
+            "What is the average temperature?", 
+            "Which float reached the lowest depth?"
+        ]})
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
+
+
+
