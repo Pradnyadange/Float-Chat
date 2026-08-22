@@ -9,21 +9,33 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
-            background-color: #0b1120;
+            background: transparent !important;
             font-family: 'Segoe UI', system-ui, sans-serif;
         }
 
         .glass-card {
-            background: rgba(17, 24, 39, 0.85);
+            background: rgba(10, 30, 50, 0.58);
             backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
+
+        .login-content {
+            position: relative;
+            z-index: 2;
+        }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body class="flex items-center justify-center min-h-screen p-4 text-slate-100">
+    <video id="ocean-bg" autoplay muted loop playsinline>
+        <source src="{{ url_for('static', filename='video/ocean.mp4') }}" type="video/mp4">
+    </video>
 
-    <div class="glass-card w-full max-w-md p-8 rounded-2xl shadow-2xl relative overflow-hidden">
+    <div id="ocean-overlay"></div>
+
+    <div class="login-content glass-card w-full max-w-md p-8 rounded-2xl shadow-2xl overflow-hidden">
         <!-- Brand Header -->
         <div class="flex flex-col items-center mb-6">
             <div
@@ -91,6 +103,16 @@
     </div>
 
     <script>
+        const video = document.getElementById("ocean-bg");
+
+        if (video) {
+            video.muted = true;
+            video.volume = 0;
+            video.setAttribute("muted", "");
+            video.setAttribute("playsinline", "");
+            video.play().catch(() => {});
+        }
+
         let currentMode = 'login';
         const alertBox = document.getElementById('alert-box');
         const tabLogin = document.getElementById('tab-login');

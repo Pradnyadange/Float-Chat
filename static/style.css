@@ -37,25 +37,23 @@ html, body {
     display: block;
 }
 
-/* --- Light Mode / Dark Mode Overlay --- */
-.ocean-overlay {
+/* Dark transparent layer between the video and interactive UI. */
+#ocean-overlay {
     position: fixed;
     inset: 0;
-    background:transparent; /* Very faint tint to reveal waves */
+    background: rgba(3, 18, 35, 0.50);
     z-index: 1;
     pointer-events: none;
-    transition: background 0.3s ease;
 }
 
 html.dark body {
     color: #f8fafc; /* Slate text for dark mode */
 }
 
-html.dark .ocean-overlay {
-    background: rgba(3, 18, 35, 0.6); /* Deep ocean overlay for dark mode */
-}
-
-.app-content, .main-wrapper {
+.app-content,
+.main-wrapper,
+#sidebar-container,
+#workspace-container {
     position: relative;
     z-index: 2;
 }

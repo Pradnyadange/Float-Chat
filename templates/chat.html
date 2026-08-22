@@ -29,8 +29,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .glass-panel-dark {
-            background: rgba(15, 23, 42, 0.85);
+            background: rgba(10, 30, 50, 0.58);
             backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             border-color: rgba(255, 255, 255, 0.08);
         }
 
@@ -66,10 +67,15 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
-<body
-    class="bg-slate-950 text-slate-100 dark:bg-slate-950 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200">
+<body class="text-slate-100 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200">
+    <video id="ocean-bg" autoplay muted loop playsinline>
+        <source src="{{ url_for('static', filename='video/ocean.mp4') }}" type="video/mp4">
+    </video>
+
+    <div id="ocean-overlay"></div>
 
     <!-- Left Sidebar: ChromaDB History & SQLite Relational Session -->
     <aside id="sidebar-container"
@@ -145,7 +151,7 @@
     </aside>
 
     <!-- Main Workspace -->
-    <div class="flex-1 flex flex-col h-full overflow-hidden bg-slate-900/40">
+    <div id="workspace-container" class="flex-1 flex flex-col h-full overflow-hidden">
 
         <!-- Header -->
         <header id="main-header"
@@ -291,6 +297,16 @@
 
     <!-- Script Logic -->
     <script>
+        const video = document.getElementById("ocean-bg");
+
+        if (video) {
+            video.muted = true;
+            video.volume = 0;
+            video.setAttribute("muted", "");
+            video.setAttribute("playsinline", "");
+            video.play().catch(() => {});
+        }
+
         const chatBox = document.getElementById('chat-box');
         const chatForm = document.getElementById('chat-form');
         const userInput = document.getElementById('user-input');
