@@ -16,11 +16,19 @@ from PIL import Image
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from groq import Groq
+
+# Optional Google Generative AI Import for Streaming
+try:
+    import google.generativeai as genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 # Import custom ARGO service if present
 try:
@@ -40,6 +48,10 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 load_dotenv()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 groq_client = Groq(api_key=GROQ_API_KEY) if (GROQ_API_KEY and len(GROQ_API_KEY) > 10) else None
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+if genai and GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # ==============================================================================
 # 1. SQLITE RELATIONAL DB
@@ -237,16 +249,14 @@ def calc_salinity_at_depth(depth_dbar: float, lat: float = 18.0, lon: float = 65
         return float(np.round(34.80 - ((depth_dbar - 500.0) * 0.15 / 1500.0), 2))
 
 def calc_doxy_at_depth(depth_dbar: float, lat: float = 18.0, lon: float = 65.0) -> float:
-    # Arabian Sea severe OMZ characteristics
     if 10.0 <= lat <= 26.0 and 50.0 <= lon <= 75.0:
         if depth_dbar <= 80.0:
             return float(np.round(210.0 - (depth_dbar * 1.8), 2))
         elif depth_dbar <= 900.0:
-            return float(np.round(4.2 + (depth_dbar * 0.005), 2)) # Severe hypoxic core
+            return float(np.round(4.2 + (depth_dbar * 0.005), 2))
         else:
             return float(np.round(10.0 + ((depth_dbar - 900.0) * 0.12), 2))
     else:
-        # Standard ocean basin oxygen profile
         if depth_dbar <= 100.0:
             return float(np.round(225.0 - (depth_dbar * 0.4), 2))
         elif depth_dbar <= 800.0:
@@ -1037,47 +1047,30 @@ def chat():
 @app.route('/stream', methods=['POST'])
 def stream():
     try:
-        from flask import Response
-        
         req = request.get_json(force=True)
         history = req.get('history', [])
         current_message = req.get('currentMessage', '')
         
-        response_text = ""
-        
         def generate():
-            nonlocal response_text
-            
-            # Convert history to expected format
+            if not genai or not GEMINI_API_KEY:
+                yield "Streaming is not available (Google GenAI key not configured)."
+                return
+
             messages = []
             for entry in history:
-                role = "assistant" if entry.get("from") == "AI" else "user"
-                messages.append({"role": role, "parts": [{"text": entry.get("text", "")]}])
+                role = "model" if entry.get("from") == "AI" else "user"
+                messages.append({"role": role, "parts": [{"text": entry.get("text", "")}]})
             
-            # Add current message
             messages.append({"role": "user", "parts": [{"text": current_message}]})
             
-            # Call Gemini streaming API
-            model = genai.GenerativeModel('gemini-2.0-flash-exp-20240505')
             try:
-                stream = model.generate_content(
-                    messages,
-                    stream=True,
-                    generation_config=types.GenerateContentConfig(
-                        temperature=0.7,
-                        max_output_tokens=4096
-                    )
-                )
-                
-                for chunk in stream:
+                model = genai.GenerativeModel('gemini-2.0-flash')
+                response = model.generate_content(messages, stream=True)
+                for chunk in response:
                     if chunk.text:
-                        response_text += chunk.text
                         yield chunk.text
-                        
             except Exception as e:
-                error_msg = f"❌ API Error: {e}"
-                response_text += error_msg
-                yield error_msg
+                yield f"❌ API Error: {str(e)}"
         
         return Response(generate(), mimetype='text/event-stream')
         
