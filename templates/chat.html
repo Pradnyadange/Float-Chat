@@ -23,6 +23,17 @@
             }
         }
     </script>
+    <!-- Anti-flicker Theme Initializer -->
+    <script>
+            (function () {
+                const savedTheme = localStorage.getItem('floatchat_theme');
+                if (savedTheme === 'light') {
+                    document.documentElement.classList.remove('dark');
+                } else {
+                    document.documentElement.classList.add('dark');
+                }
+            })();
+    </script>
     <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- FontAwesome Icons -->
@@ -42,20 +53,42 @@
             pointer-events: none;
         }
 
+        /* Responsive Video Overlays for Dark vs Light Mode */
         .video-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(10, 15, 29, 0.55);
-            backdrop-filter: blur(2px);
             z-index: 1;
             pointer-events: none;
+            transition: background-color 0.3s ease;
         }
 
-        .glass-panel-dark {
-            background: rgba(15, 23, 42, 0.75) !important;
+        html.dark .video-overlay {
+            background: rgba(10, 15, 29, 0.65);
+            backdrop-filter: blur(2px);
+        }
+
+        html:not(.dark) .video-overlay {
+            background: rgba(241, 245, 249, 0.65);
+            backdrop-filter: blur(2px);
+        }
+
+        /* Adaptive Glass Panels */
+        .glass-panel {
             backdrop-filter: blur(16px) !important;
             -webkit-backdrop-filter: blur(16px) !important;
-            border-color: rgba(255, 255, 255, 0.1) !important;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        html.dark .glass-panel {
+            background: rgba(15, 23, 42, 0.78);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+        }
+
+        html:not(.dark) .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            border-color: rgba(0, 0, 0, 0.1);
+            color: #0f172a;
         }
 
         .plot-container {
@@ -93,7 +126,7 @@
 </head>
 
 <body
-    class="bg-slate-950 text-slate-100 dark:bg-slate-950 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200 relative">
+    class="bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200 relative">
 
     <!-- Live Looping Ocean Video Background -->
     <video autoplay muted loop playsinline id="bg-video">
@@ -101,64 +134,69 @@
     </video>
     <div class="video-overlay"></div>
 
-    <!-- Left Sidebar -->
+    <!-- Left Sidebar: History & User Session -->
     <aside id="sidebar-container"
-        class="w-72 glass-panel-dark border-r border-slate-800 flex flex-col h-full z-20 transition-colors duration-200 relative">
-        <div class="p-4 border-b border-slate-800/80 flex items-center justify-between">
+        class="w-72 glass-panel border-r border-slate-200 dark:border-slate-800 flex flex-col h-full z-20 relative transition-colors duration-200">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
             <div class="flex items-center space-x-2">
-                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                <div
+                    class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-500 dark:text-cyan-400 flex items-center justify-center font-bold">
                     <i class="fa-solid fa-water"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-sm tracking-wide">FloatChat AI</h1>
-                    <p class="text-[10px] text-slate-400">ARGO In-Situ Discovery</p>
+                    <h1 class="font-bold text-sm tracking-wide text-slate-900 dark:text-slate-100">FloatChat AI</h1>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400">ARGO In-Situ Discovery</p>
                 </div>
             </div>
             <button type="button" onclick="startNewChat()" title="New Chat Session"
-                class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-cyan-400 text-xs border border-slate-700 flex items-center gap-1 transition">
+                class="px-2.5 py-1 rounded-lg bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-cyan-600 dark:text-cyan-400 text-xs border border-slate-300 dark:border-slate-700 flex items-center gap-1 transition">
                 <i class="fa-solid fa-plus"></i> New
             </button>
         </div>
 
-        <div class="p-3 flex items-center justify-between border-b border-slate-800/50">
+        <div class="p-3 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/50">
             <span
-                class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
-                <i class="fa-solid fa-database text-cyan-400 text-[10px]"></i> ChromaDB History
+                class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-database text-cyan-500 dark:text-cyan-400 text-[10px]"></i> ChromaDB History
             </span>
             <span id="history-count"
-                class="text-[10px] bg-slate-800/90 text-cyan-300 px-2 py-0.5 rounded-full font-mono">0</span>
+                class="text-[10px] bg-slate-200 dark:bg-slate-800/90 text-cyan-600 dark:text-cyan-300 px-2 py-0.5 rounded-full font-mono">0</span>
         </div>
 
         <div id="history-list" class="flex-1 overflow-y-auto p-2 space-y-1 text-xs"></div>
 
-        <div class="p-3 border-t border-slate-800/80 flex flex-col gap-2.5">
+        <!-- Sidebar Footer with Working Theme Switcher -->
+        <div class="p-3 border-t border-slate-200 dark:border-slate-800/80 flex flex-col gap-2.5">
             <div class="flex items-center justify-between text-xs">
                 <button type="button" onclick="clearAllHistory()"
-                    class="text-rose-400 hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
+                    class="text-rose-500 dark:text-rose-400 hover:underline transition flex items-center gap-1.5 text-[11px]">
                     <i class="fa-regular fa-trash-can"></i> Clear History
                 </button>
 
+                <!-- Functional Dark / Light Switch Button -->
                 <button type="button" id="theme-toggle" onclick="toggleTheme()"
-                    class="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-amber-400 dark:text-amber-300 text-xs border border-slate-700 flex items-center gap-1.5 transition"
-                    title="Toggle Theme">
-                    <i id="theme-icon" class="fa-solid fa-sun"></i>
-                    <span id="theme-text" class="text-[10px] text-slate-300">Light</span>
+                    class="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 transition"
+                    title="Toggle Light / Dark Mode">
+                    <i id="theme-icon" class="fa-solid fa-moon text-indigo-500 dark:text-amber-300 text-xs"></i>
+                    <span id="theme-text"
+                        class="text-[11px] font-semibold text-slate-700 dark:text-slate-200">Dark</span>
                 </button>
             </div>
 
-            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+            <div
+                class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80 text-xs">
                 <div class="flex items-center gap-2 truncate">
                     <div
-                        class="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs">
+                        class="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-xs">
                         <i class="fa-solid fa-user"></i>
                     </div>
-                    <span class="text-[11px] text-slate-300 font-medium truncate max-w-[120px]"
+                    <span class="text-[11px] text-slate-700 dark:text-slate-300 font-medium truncate max-w-[120px]"
                         title="Authenticated User">
                         {{ current_user or 'Operator' }}
                     </span>
                 </div>
                 <a href="/logout" title="Sign Out"
-                    class="text-slate-400 hover:text-rose-400 transition text-[11px] flex items-center gap-1">
+                    class="text-slate-400 hover:text-rose-500 transition text-[11px] flex items-center gap-1">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
                 </a>
             </div>
@@ -167,26 +205,30 @@
 
     <!-- Main Workspace -->
     <div class="flex-1 flex flex-col h-full overflow-hidden z-10 relative">
+
+        <!-- Header with View Switcher -->
         <header id="main-header"
-            class="glass-panel-dark px-6 py-3 flex items-center justify-between border-b border-slate-800/80 transition-colors duration-200">
+            class="glass-panel px-6 py-3 flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 transition-colors duration-200">
             <div class="flex items-center gap-3">
-                <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700/80 text-xs">
+                <div
+                    class="flex items-center bg-slate-200/90 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-300 dark:border-slate-700/80 text-xs">
                     <button type="button" id="tab-chat" onclick="switchView('chat')"
                         class="px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-cyan-600 text-white shadow-sm">
                         <i class="fa-solid fa-message"></i> AI Chat Workspace
                     </button>
                     <button type="button" id="tab-globe" onclick="switchView('globe')"
-                        class="px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-cyan-300">
-                        <i class="fa-solid fa-earth-americas text-cyan-400"></i> 3D Globe Explorer
+                        class="px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300">
+                        <i class="fa-solid fa-earth-americas text-cyan-600 dark:text-cyan-400"></i> 3D Globe Explorer
                     </button>
                 </div>
             </div>
 
             <div id="active-region-badge"
-                class="flex items-center gap-2 bg-slate-900/90 border border-cyan-500/40 px-3 py-1.5 rounded-xl text-xs">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="text-slate-400">Active Station:</span>
-                <span id="active-region-name" class="font-semibold text-cyan-300">Arabian Sea (18.0°N, 65.0°E)</span>
+                class="flex items-center gap-2 bg-slate-200/90 dark:bg-slate-900/90 border border-slate-300 dark:border-cyan-500/40 px-3 py-1.5 rounded-xl text-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-slate-500 dark:text-slate-400">Active Station:</span>
+                <span id="active-region-name" class="font-semibold text-cyan-600 dark:text-cyan-300">Arabian Sea
+                    (18.0°N, 65.0°E)</span>
             </div>
         </header>
 
@@ -195,23 +237,23 @@
             <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
                 <div id="welcome-message" class="flex items-start space-x-3">
                     <div
-                        class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
+                        class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
                         <i class="fa-solid fa-compass"></i>
                     </div>
                     <div id="welcome-card"
-                        class="glass-panel-dark p-5 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-2xl max-w-4xl shadow-lg space-y-3">
+                        class="glass-panel p-5 text-sm rounded-2xl max-w-4xl shadow-lg space-y-3 border-l-4 border-cyan-500 border border-slate-200 dark:border-slate-800">
                         <div>
-                            <p class="font-semibold text-cyan-400 text-base" id="welcome-title">ARGO Intelligence Hub
-                                Ready</p>
-                            <p class="text-xs text-slate-300 mt-1" id="welcome-desc">Upload any document, text file, or
-                                PDF scan to extract and answer questions, or explore global stations on the <strong>3D
-                                    Globe Explorer</strong>.</p>
+                            <p class="font-semibold text-cyan-600 dark:text-cyan-400 text-base" id="welcome-title">ARGO
+                                Intelligence Hub Ready</p>
+                            <p class="text-xs text-slate-600 dark:text-slate-300 mt-1" id="welcome-desc">Upload any
+                                document, PDF, or text file to extract queries, or explore global stations on the
+                                <strong>3D Globe Explorer</strong>.</p>
                         </div>
 
-                        <div class="pt-2 border-t border-slate-800/80">
+                        <div class="pt-2 border-t border-slate-200 dark:border-slate-800/80">
                             <p
-                                class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-                                <i class="fa-solid fa-lightbulb text-amber-400"></i> <span
+                                class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5 flex items-center gap-1.5">
+                                <i class="fa-solid fa-lightbulb text-amber-500"></i> <span
                                     id="suggestions-header">Suggested Inquiries:</span>
                             </p>
                             <div id="welcome-suggestions-container" class="flex flex-wrap gap-2"></div>
@@ -222,59 +264,60 @@
 
             <!-- Staged File Preview Banner -->
             <div id="file-preview-banner"
-                class="hidden px-6 py-2 bg-slate-900/90 border-t border-cyan-500/40 flex items-center justify-between text-xs text-cyan-400">
+                class="hidden px-6 py-2 bg-slate-200 dark:bg-slate-900/90 border-t border-cyan-500/40 flex items-center justify-between text-xs text-cyan-600 dark:text-cyan-400">
                 <div class="flex items-center gap-2.5">
-                    <i class="fa-solid fa-file-arrow-up text-cyan-400 text-sm"></i>
+                    <i class="fa-solid fa-file-arrow-up text-cyan-500 text-sm"></i>
                     <div>
-                        <span id="staged-file-name" class="font-semibold text-slate-100"></span>
-                        <span id="staged-file-size" class="text-[11px] text-slate-400 ml-1.5"></span>
+                        <span id="staged-file-name" class="font-semibold text-slate-900 dark:text-slate-100"></span>
+                        <span id="staged-file-size"
+                            class="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5"></span>
                     </div>
                 </div>
                 <button type="button" onclick="removeStagedFile()"
-                    class="text-slate-400 hover:text-rose-400 px-2 py-1 rounded transition flex items-center gap-1">
+                    class="text-slate-500 hover:text-rose-500 px-2 py-1 rounded transition flex items-center gap-1">
                     <i class="fa-solid fa-xmark"></i> Remove
                 </button>
             </div>
 
             <!-- Suggestion Chips Bar -->
             <div
-                class="px-6 py-2 border-t border-slate-800/60 glass-panel-dark flex items-center gap-2 overflow-x-auto text-xs">
-                <span class="text-[10px] uppercase font-bold text-slate-400 whitespace-nowrap flex items-center gap-1">
-                    <i class="fa-solid fa-bolt text-cyan-400"></i><span id="quick-queries-label">Quick Queries:</span>
+                class="px-6 py-2 border-t border-slate-200 dark:border-slate-800/60 glass-panel flex items-center gap-2 overflow-x-auto text-xs">
+                <span
+                    class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-1">
+                    <i class="fa-solid fa-bolt text-cyan-500"></i><span id="quick-queries-label">Quick Queries:</span>
                 </span>
                 <div id="quick-chips-container" class="flex items-center gap-2"></div>
             </div>
 
             <!-- Chat Input Bar -->
             <footer id="main-footer"
-                class="p-4 glass-panel-dark border-t border-slate-800/80 transition-colors duration-200">
+                class="p-4 glass-panel border-t border-slate-200 dark:border-slate-800/80 transition-colors duration-200">
                 <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-2">
                     <input type="file" id="file-input" class="hidden"
                         accept=".csv,.txt,.json,.nc,.dat,.pdf,.png,.jpg,.jpeg" onchange="handleFileSelected(event)" />
 
                     <button type="button" onclick="document.getElementById('file-input').click()"
-                        title="Upload Text Document, PDF or Ocean Telemetry Scan (.txt, .pdf, .csv, .png)"
-                        class="p-3 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 rounded-xl border border-slate-700 transition flex items-center justify-center">
+                        title="Upload Document or Scan (.pdf, .txt, .csv, .png)"
+                        class="p-3 bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-900/90 dark:hover:bg-slate-800 text-slate-700 hover:text-cyan-600 dark:text-slate-300 dark:hover:text-cyan-400 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center">
                         <i class="fa-solid fa-paperclip text-sm"></i>
                     </button>
 
                     <select id="voice-lang" onchange="updateLanguageUI()"
-                        class="bg-slate-900/90 text-cyan-400 text-xs px-2.5 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer transition"
-                        title="Select Voice & Query Language">
+                        class="bg-slate-200/90 dark:bg-slate-900/90 text-cyan-700 dark:text-cyan-400 text-xs px-2.5 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer transition font-medium"
+                        title="Select Language">
                         <option value="en-IN" selected>🌐 English</option>
                         <option value="hi-IN">🇮🇳 हिन्दी (Hindi)</option>
                         <option value="mr-IN">🚩 मराठी (Marathi)</option>
                     </select>
 
-                    <button type="button" id="mic-btn" onclick="toggleVoiceRecording()"
-                        title="Voice Input (Click to speak)"
-                        class="p-3 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 rounded-xl border border-slate-700 transition">
+                    <button type="button" id="mic-btn" onclick="toggleVoiceRecording()" title="Voice Input"
+                        class="p-3 bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-900/90 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-emerald-500 rounded-xl border border-slate-300 dark:border-slate-700 transition">
                         <i id="mic-icon" class="fa-solid fa-microphone text-sm"></i>
                     </button>
 
                     <input id="user-input" type="text"
                         placeholder="Show me dissolved oxygen (DOXY) profile at 200 dbar / प्रश्न विचारा..."
-                        class="flex-1 bg-slate-900/90 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+                        class="flex-1 bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
                         autocomplete="off" />
 
                     <button type="submit" id="send-btn"
@@ -289,28 +332,30 @@
         <!-- VIEW 2: DEDICATED 3D WORLD GLOBE EXPLORER SECTION -->
         <div id="view-globe-container" class="hidden flex-1 flex flex-col h-full overflow-hidden p-6 relative">
             <div
-                class="glass-panel-dark border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden relative shadow-2xl">
-                <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+                class="glass-panel border border-slate-200 dark:border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden relative shadow-2xl">
+                <div
+                    class="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-200/60 dark:bg-slate-900/60">
                     <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-earth-americas text-cyan-400 text-base"></i>
+                        <i class="fa-solid fa-earth-americas text-cyan-600 dark:text-cyan-400 text-base"></i>
                         <div>
-                            <h3 class="text-xs font-bold text-slate-200">Global Digital Ocean Globe</h3>
-                            <p class="text-[10px] text-slate-400">Hover across ocean stations & major trenches or click
-                                to track coordinates for queries</p>
+                            <h3 class="text-xs font-bold text-slate-900 dark:text-slate-200">Global Digital Ocean Globe
+                            </h3>
+                            <p class="text-[10px] text-slate-500 dark:text-slate-400">Hover across ocean stations &
+                                major trenches or click to track coordinates</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <span class="text-[11px] text-slate-400 font-medium">Quick Landmarks:</span>
+                        <span class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Quick Landmarks:</span>
                         <button type="button" onclick="flyToLandmark(11.35, 142.20, 'Mariana Trench (Challenger Deep)')"
-                            class="px-2.5 py-1 bg-slate-800 hover:bg-cyan-950 text-cyan-300 border border-slate-700 rounded-lg text-xs transition">
+                            class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs transition">
                             Mariana Trench
                         </button>
                         <button type="button" onclick="flyToLandmark(21.40, 64.20, 'Oman Upwelling (Arabian Sea OMZ)')"
-                            class="px-2.5 py-1 bg-slate-800 hover:bg-cyan-950 text-cyan-300 border border-slate-700 rounded-lg text-xs transition">
+                            class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs transition">
                             Arabian Sea OMZ
                         </button>
                         <button type="button" onclick="flyToLandmark(0.50, 165.00, 'Equatorial Pacific Warm Pool')"
-                            class="px-2.5 py-1 bg-slate-800 hover:bg-cyan-950 text-cyan-300 border border-slate-700 rounded-lg text-xs transition">
+                            class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs transition">
                             Pacific Warm Pool
                         </button>
                     </div>
@@ -318,21 +363,21 @@
 
                 <div id="dedicated-globe-plot" class="flex-1 w-full h-full"></div>
 
-                <div class="p-3 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between text-xs">
+                <div
+                    class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-200/80 dark:bg-slate-900/80 flex items-center justify-between text-xs">
                     <div class="flex items-center gap-3">
-                        <span class="text-slate-400">Selected Target:</span>
-                        <span id="globe-selected-coords" class="font-mono text-cyan-300 font-semibold">Lat: 18.00°N |
-                            Lon: 65.00°E</span>
+                        <span class="text-slate-600 dark:text-slate-400">Selected Target:</span>
+                        <span id="globe-selected-coords"
+                            class="font-mono text-cyan-700 dark:text-cyan-300 font-semibold">Lat: 18.00°N | Lon:
+                            65.00°E</span>
                         <span id="globe-selected-basin"
-                            class="bg-cyan-950/80 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded text-[11px]">Arabian
+                            class="bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/30 px-2 py-0.5 rounded text-[11px]">Arabian
                             Sea</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button type="button" onclick="sendSelectedRegionToChat()"
-                            class="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium rounded-xl shadow-md transition flex items-center gap-1.5">
-                            <i class="fa-solid fa-arrow-right"></i> Ask FloatChat About This Region
-                        </button>
-                    </div>
+                    <button type="button" onclick="sendSelectedRegionToChat()"
+                        class="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium rounded-xl shadow-md transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrow-right"></i> Ask FloatChat About This Region
+                    </button>
                 </div>
             </div>
         </div>
@@ -408,13 +453,43 @@
             }
         };
 
+        // Complete Theme Controller Logic
+        function applySavedTheme() {
+            const savedTheme = localStorage.getItem('floatchat_theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+                themeIcon.className = "fa-solid fa-moon text-indigo-500 text-xs";
+                themeText.textContent = "Dark";
+            } else {
+                document.documentElement.classList.add('dark');
+                themeIcon.className = "fa-solid fa-sun text-amber-300 text-xs";
+                themeText.textContent = "Light";
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const newTheme = isDark ? 'light' : 'dark';
+            localStorage.setItem('floatchat_theme', newTheme);
+            applySavedTheme();
+
+            // Re-render any active plotly plot templates
+            document.querySelectorAll('.js-plotly-plot').forEach(el => {
+                Plotly.relayout(el, {
+                    template: newTheme === 'dark' ? 'plotly_dark' : 'plotly_white',
+                    paper_bgcolor: newTheme === 'dark' ? '#1e222d' : '#ffffff',
+                    plot_bgcolor: newTheme === 'dark' ? '#1e222d' : '#f8fafc'
+                });
+            });
+        }
+
         function switchView(target) {
             if (target === 'globe') {
                 viewChatContainer.classList.add('hidden');
                 viewGlobeContainer.classList.remove('hidden');
 
                 tabGlobe.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-cyan-600 text-white shadow-sm";
-                tabChat.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-cyan-300";
+                tabChat.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300";
 
                 if (!dedicatedGlobeRendered) {
                     loadDedicated3DGlobe();
@@ -426,7 +501,7 @@
                 viewChatContainer.classList.remove('hidden');
 
                 tabChat.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-cyan-600 text-white shadow-sm";
-                tabGlobe.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-cyan-300";
+                tabGlobe.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300";
             }
         }
 
@@ -506,39 +581,16 @@
             suggestionsHeader.textContent = data.header;
 
             welcomeSuggestionsContainer.innerHTML = data.queries.map(q => `
-                <button type="button" onclick="applySuggestion('${q.full}')" class="text-xs bg-slate-800/90 hover:bg-cyan-950 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
-                    <i class="fa-solid ${q.icon} text-[10px] text-cyan-400"></i> ${q.full}
+                <button type="button" onclick="applySuggestion('${q.full}')" class="text-xs bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-cyan-950 text-cyan-800 dark:text-cyan-300 hover:text-cyan-950 dark:hover:text-cyan-200 border border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                    <i class="fa-solid ${q.icon} text-[10px] text-cyan-600 dark:text-cyan-400"></i> ${q.full}
                 </button>
             `).join('');
 
             quickChipsContainer.innerHTML = data.queries.map(q => `
-                <button type="button" onclick="applySuggestion('${q.full}')" class="whitespace-nowrap px-2.5 py-1 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
+                <button type="button" onclick="applySuggestion('${q.full}')" class="whitespace-nowrap px-2.5 py-1 bg-slate-200 dark:bg-slate-800/90 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 transition text-[11px]">
                     ${q.label}
                 </button>
             `).join('');
-        }
-
-        function applySavedTheme() {
-            const savedTheme = localStorage.getItem('floatchat_theme') || 'dark';
-            if (savedTheme === 'light') {
-                document.documentElement.classList.remove('dark');
-                document.body.classList.remove('bg-slate-950', 'text-slate-100');
-                document.body.classList.add('bg-slate-100', 'text-slate-800');
-                themeIcon.className = "fa-solid fa-moon text-indigo-400";
-                themeText.textContent = "Dark";
-            } else {
-                document.documentElement.classList.add('dark');
-                document.body.classList.remove('bg-slate-100', 'text-slate-800');
-                document.body.classList.add('bg-slate-950', 'text-slate-100');
-                themeIcon.className = "fa-solid fa-sun text-amber-300";
-                themeText.textContent = "Light";
-            }
-        }
-
-        function toggleTheme() {
-            const isDark = document.documentElement.classList.contains('dark');
-            localStorage.setItem('floatchat_theme', isDark ? 'light' : 'dark');
-            applySavedTheme();
         }
 
         function applySuggestion(text) {
@@ -549,7 +601,7 @@
 
         function toggleVoiceRecording() {
             if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-                alert("Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.");
+                alert("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
                 return;
             }
 
@@ -593,7 +645,7 @@
         function stopVoiceRecording() {
             isRecording = false;
             micBtn.classList.remove('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
-            micIcon.className = "fa-solid fa-microphone text-slate-300";
+            micIcon.className = "fa-solid fa-microphone text-slate-700 dark:text-slate-300";
             updateLanguageUI();
         }
 
@@ -624,13 +676,13 @@
             dbHistory.slice().reverse().forEach((item, idx) => {
                 const actualIdx = dbHistory.length - 1 - idx;
                 const el = document.createElement('div');
-                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-800/80 cursor-pointer transition text-slate-300 border border-transparent hover:border-slate-700/60";
+                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800/80 cursor-pointer transition text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-300 dark:hover:border-slate-700/60";
                 el.innerHTML = `
                     <div class="flex items-center gap-2 flex-1 min-w-0 pr-2" onclick="displaySavedSession(${actualIdx})">
-                        <i class="fa-regular fa-message text-cyan-400 text-xs"></i>
+                        <i class="fa-regular fa-message text-cyan-600 dark:text-cyan-400 text-xs"></i>
                         <span class="truncate font-medium">${item.prompt}</span>
                     </div>
-                    <button type="button" onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition">
+                    <button type="button" onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 p-1 transition">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 `;
@@ -671,7 +723,7 @@
         function appendUserMessage(text, timestamp, attachedFileName = null) {
             const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const fileBadge = attachedFileName ? `
-                <div class="inline-flex items-center gap-1.5 bg-cyan-950/80 text-cyan-300 text-[11px] px-2.5 py-1 rounded-md mb-2 border border-cyan-500/40">
+                <div class="inline-flex items-center gap-1.5 bg-blue-700 text-white text-[11px] px-2.5 py-1 rounded-md mb-2 border border-blue-400">
                     <i class="fa-solid fa-file-lines"></i>
                     <span>Attached: ${attachedFileName}</span>
                 </div><br>
@@ -696,21 +748,21 @@
 
             let contentHtml = `
                 <div class="flex items-start space-x-3">
-                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
+                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
                         <i class="fa-solid fa-cube"></i>
                     </div>
-                    <div class="glass-panel-dark p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md">
-                        <div class="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
-                        <span class="block text-left text-[10px] text-slate-400 mt-2">${time}</span>
+                    <div class="glass-panel p-4 text-sm rounded-xl w-full max-w-5xl shadow-md border-l-4 border-cyan-500 border border-slate-200 dark:border-slate-800">
+                        <div class="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
+                        <span class="block text-left text-[10px] text-slate-500 dark:text-slate-400 mt-2">${time}</span>
                         ${chartJson ? `
-                            <div class="mt-4 pt-3 border-t border-slate-700/60">
+                            <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60">
                                 <div class="flex items-center justify-between mb-2">
-                                    <span class="text-xs text-slate-400 font-medium"><i class="fa-solid fa-cube text-cyan-400 mr-1"></i> 3D In-Situ Observation Visualizer</span>
+                                    <span class="text-xs text-slate-500 dark:text-slate-400 font-medium"><i class="fa-solid fa-cube text-cyan-600 dark:text-cyan-400 mr-1"></i> 3D Telemetry Visualizer</span>
                                     <div class="flex gap-2">
-                                        <button type="button" onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-slate-800/90 hover:bg-slate-700 text-cyan-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                        <button type="button" onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-cyan-700 dark:text-cyan-400 px-2.5 py-1 rounded border border-slate-300 dark:border-slate-600 flex items-center gap-1 transition">
                                             <i class="fa-solid fa-download"></i> PNG
                                         </button>
-                                        <button type="button" onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-slate-800/90 hover:bg-slate-700 text-purple-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                        <button type="button" onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-purple-700 dark:text-purple-400 px-2.5 py-1 rounded border border-slate-300 dark:border-slate-600 flex items-center gap-1 transition">
                                             <i class="fa-solid fa-file-code"></i> SVG
                                         </button>
                                     </div>
@@ -727,7 +779,15 @@
             if (chartJson) {
                 setTimeout(() => {
                     try {
+                        const isDark = document.documentElement.classList.contains('dark');
                         const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
+
+                        // Adapt plot template to active theme
+                        if (plotData.layout) {
+                            plotData.layout.paper_bgcolor = isDark ? '#1e222d' : '#ffffff';
+                            plotData.layout.plot_bgcolor = isDark ? '#1e222d' : '#f8fafc';
+                        }
+
                         const config = {
                             responsive: true,
                             displayModeBar: true,
@@ -776,7 +836,7 @@
 
             const loadingId = 'loading-' + Date.now();
             chatBox.insertAdjacentHTML('beforeend', `
-                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-400 text-xs py-2">
+                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-600 dark:text-cyan-400 text-xs py-2">
                     <i class="fa-solid fa-spinner fa-spin text-sm"></i>
                     <span>Extracting questions & generating 3D oceanographic visualization...</span>
                 </div>
