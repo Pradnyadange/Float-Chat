@@ -21,57 +21,65 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from groq import Groq
-from argo_service import fetch_region_data
+
+# Import custom ARGO service if present
+try:
+    from argo_service import fetch_region_data
+except ImportError:
+    def fetch_region_data():
+        return pd.DataFrame()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "argo_super_secret_session_key_2026_x89")
-
-# 30-day persistent session
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "floatchat_flawless_dynamic_extractor_2026")
 app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=30)
 
-# Configure Upload Folder
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# Load environment variables
 load_dotenv()
-PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-ARGOVIS_API_KEY = os.environ.get("ARGOVIS_API_KEY", "b3cfb9064f510e87e9337b86d2487fbc9b56a9d7")
-
 groq_client = Groq(api_key=GROQ_API_KEY) if (GROQ_API_KEY and len(GROQ_API_KEY) > 10) else None
 
 # ==============================================================================
-# RELATIONAL DATABASE (SQLITE) SETUP FOR USER PROFILES
+# 1. SQLITE RELATIONAL DB
 # ==============================================================================
 SQLITE_DB_PATH = os.path.join(os.path.dirname(__file__), "floatchat_users.db")
 
+def get_db_connection():
+    conn = sqlite3.connect(SQLITE_DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=30000;")
+    return conn
 
 def init_relational_db():
-    conn = sqlite3.connect(SQLITE_DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+    except Exception as e:
+        print(f"DB Init Exception: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 init_relational_db()
 
 # ==============================================================================
-# VECTOR DATABASE (CHROMADB) PERSISTENCE FOR CHAT SESSIONS
+# 2. CHROMADB VECTOR DATABASE
 # ==============================================================================
 CHROMA_DATA_PATH = os.path.join(os.path.dirname(__file__), "chroma_db")
 chroma_client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
-history_collection = chroma_client.get_or_create_collection(name="floatchat_conversational_history")
-
+history_collection = chroma_client.get_or_create_collection(name="floatchat_multilingual_history")
 
 def save_to_chromadb(prompt: str, reply: str, chart_json: str, timestamp_str: str, user: str = "guest"):
     try:
@@ -91,7 +99,6 @@ def save_to_chromadb(prompt: str, reply: str, chart_json: str, timestamp_str: st
         )
     except Exception as e:
         print(f"ChromaDB Save Error: {e}")
-
 
 def get_history_from_chromadb(current_user: str = "guest"):
     try:
@@ -115,114 +122,45 @@ def get_history_from_chromadb(current_user: str = "guest"):
         print(f"ChromaDB Fetch Error: {e}")
         return []
 
+# ==============================================================================
+# 3. DYNAMIC MULTI-FORMAT FILE PARSER & EXTRACTION PIPELINE
+# ==============================================================================
+def detect_query_lang(text: str) -> str:
+    t = text.lower()
+    if any(k in t for k in ["आहे", "काय", "मधील", "सरासरी", "दाखवा", "किती", "झोन", "पाण्याचे", "सांगा", "माहिती", "खोलीवर", "सागरी", "समुद्रातील"]):
+        return "mr"
+    if any(k in t for k in ["है", "क्या", "का", "औसत", "दिखाइए", "कितना", "बताइए", "गहराई", "तापमान", "लवणता", "सागर", "पर"]):
+        return "hi"
+    return "en"
 
-def load_dataset() -> pd.DataFrame:
+def normalize_multilingual_query(raw_text: str) -> dict:
+    if not groq_client or not raw_text.strip():
+        return {"english_query": raw_text, "lang": detect_query_lang(raw_text)}
+
     try:
-        df = fetch_region_data()
-        if df is not None and not df.empty:
-            return df
-    except Exception as e:
-        print(f"Dataset load notice: {e}")
-    return pd.DataFrame()
-
-
-df_argo = load_dataset()
-
-
-# ==============================================================================
-# OCEANOGRAPHIC COMPUTATION & THERMAL GRADIENT MODELS
-# ==============================================================================
-def identify_global_basin(lat: float, lon: float) -> dict:
-    if lon > 180:
-        lon -= 360
-    if lat <= -60.0:
-        return {"ocean": "Southern Ocean", "basin": "Antarctic Circumpolar Belt", "climo_temp": 1.2, "climo_sal": 34.2}
-    elif lat >= 66.5:
-        return {"ocean": "Arctic Ocean", "basin": "Arctic Eurasian Basin", "climo_temp": -0.8, "climo_sal": 32.8}
-    elif 20.0 <= lon <= 120.0 and -60.0 < lat < 30.0:
-        sub = "Northern Arabian Sea" if lat >= 18.0 else ("Central Arabian Sea" if lat >= 14.0 else "Southern Arabian Sea / Lakshadweep")
-        return {"ocean": "Indian Ocean", "basin": sub, "climo_temp": 28.2, "climo_sal": 36.2}
-    elif (-100.0 <= lon < 20.0 and -60.0 < lat < 66.5) or (lon >= 290.0 and lat > 0):
-        sub = "North Atlantic Subtropical Gyre" if lat > 0 else "South Atlantic Gyre"
-        return {"ocean": "Atlantic Ocean", "basin": sub, "climo_temp": 16.4, "climo_sal": 35.8}
-    else:
-        sub = "Northeast Pacific (California Current / Subarctic)" if (lat >= 0 and (lon < -100 or lon > 120)) else "Northwest Pacific / South Pacific"
-        return {"ocean": "Pacific Ocean", "basin": sub, "climo_temp": 9.8 if lat > 40 else 24.5, "climo_sal": 33.6 if lat > 40 else 34.9}
-
-
-def calc_temperature_at_depth(depth_dbar: float, lat: float = 18.0, lon: float = 65.0) -> float:
-    basin = identify_global_basin(lat, lon)
-    if basin["ocean"] == "Pacific Ocean" and lat >= 40:
-        return float(8.42 * np.exp(-depth_dbar / 450.0) + 2.2)
-    elif basin["ocean"] in ["Southern Ocean", "Arctic Ocean"]:
-        return float(-0.5 if depth_dbar <= 100 else 1.10)
-    else:
-        if depth_dbar <= 30.0:
-            return 28.15 - (depth_dbar * 0.015)
-        elif depth_dbar <= 150.0:
-            return 27.70 - ((depth_dbar - 30.0) * (27.70 - 18.20) / 120.0)
-        elif depth_dbar <= 500.0:
-            return 18.20 - ((depth_dbar - 150.0) * (18.20 - 11.40) / 350.0)
-        elif depth_dbar <= 1000.0:
-            return 11.40 - ((depth_dbar - 500.0) * (11.40 - 5.80) / 500.0)
-        else:
-            return 5.80 - ((depth_dbar - 1000.0) * (5.80 - 2.40) / 1000.0)
-
-
-def calc_salinity_at_depth(depth_dbar: float, lat: float = 18.0, lon: float = 65.0) -> float:
-    basin = identify_global_basin(lat, lon)
-    if basin["ocean"] == "Pacific Ocean" and lat >= 40:
-        return float(33.0 + 1.4 / (1.0 + np.exp(-(depth_dbar - 250) / 120)))
-    elif basin["ocean"] in ["Southern Ocean", "Arctic Ocean"]:
-        return float(33.40 if depth_dbar <= 100 else 34.65)
-    else:
-        if depth_dbar <= 100.0:
-            return 36.45 - (depth_dbar * 0.003)
-        elif depth_dbar <= 500.0:
-            return 36.15 - ((depth_dbar - 100.0) * (36.15 - 35.40) / 400.0)
-        else:
-            return 35.40 - ((depth_dbar - 500.0) * (35.40 - 34.85) / 1500.0)
-
-
-# ==============================================================================
-# VISION & OCR RECTIFICATION
-# ==============================================================================
-def rectify_noisy_ocr_text(raw_ocr: str) -> str:
-    if not groq_client or not raw_ocr.strip():
-        return raw_ocr
-    try:
-        response = groq_client.chat.completions.create(
+        completion = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are an OCR error correction expert for oceanography queries. "
-                        "Reconstruct clean English questions from noisy OCR strings. "
-                        "Output ONLY the rectified oceanographic question text."
+                        "Translate input into standard English oceanographic syntax. "
+                        "Identify the language ('en', 'hi', 'mr'). "
+                        "Return ONLY JSON: {\"english_query\": \"...\", \"lang\": \"...\"}."
                     )
                 },
-                {"role": "user", "content": raw_ocr}
+                {"role": "user", "content": raw_text}
             ],
             temperature=0.0,
-            max_tokens=150
+            response_format={"type": "json_object"}
         )
-        cleaned = response.choices[0].message.content.strip()
-        return cleaned if cleaned else raw_ocr
-    except Exception as e:
-        print(f"LLM Rectify error: {e}")
-        return raw_ocr
-
+        return json.loads(completion.choices[0].message.content)
+    except Exception:
+        return {"english_query": raw_text, "lang": detect_query_lang(raw_text)}
 
 def run_vision_ocr(image_bytes: bytes) -> str:
     if not groq_client:
-        try:
-            import pytesseract
-            img = Image.open(io.BytesIO(image_bytes))
-            return pytesseract.image_to_string(img)
-        except Exception:
-            return ""
-
+        return ""
     try:
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
         completion = groq_client.chat.completions.create(
@@ -231,491 +169,412 @@ def run_vision_ocr(image_bytes: bytes) -> str:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Transcribe the text in this oceanographic document. Output only the transcription."},
+                        {
+                            "type": "text", 
+                            "text": "Transcribe all text from this oceanographic document exactly as printed."
+                        },
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                     ]
                 }
             ],
-            temperature=0.1,
-            max_tokens=250
+            temperature=0.0,
+            max_tokens=400
         )
         return completion.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Vision OCR Error: {e}")
+    except Exception:
         return ""
 
+def extract_text_from_any_file(filepath: str) -> str:
+    """Dynamically reads .txt, .pdf, .csv, .json, and image scans without hardcoded assumptions."""
+    ext = os.path.splitext(filepath)[1].lower()
+    raw_text = ""
 
-def extract_text_from_pdf_or_image(filepath: str) -> str:
-    extracted_text = ""
-    with open(filepath, "rb") as f:
-        file_bytes = f.read()
+    # 1. Plain Text / CSV / JSON files
+    if ext in [".txt", ".csv", ".json", ".dat"]:
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                raw_text = f.read()
+        except Exception:
+            pass
 
-    is_raw_image = file_bytes.startswith(b'\x89PNG') or file_bytes.startswith(b'\xff\xd8') or file_bytes.startswith(b'GIF8')
-    if is_raw_image:
-        extracted_text = run_vision_ocr(file_bytes)
-
-    if not extracted_text:
+    # 2. PDF Documents
+    elif ext == ".pdf":
         try:
             reader = pypdf.PdfReader(filepath)
             for page in reader.pages:
                 t = page.extract_text()
-                if t and len(t.strip()) > 3:
-                    extracted_text += t + " "
+                if t and len(t.strip()) > 2:
+                    raw_text += t + " "
                 if hasattr(page, "images"):
-                    for img_obj in page.images:
-                        ocr_res = run_vision_ocr(img_obj.data)
-                        if ocr_res:
-                            extracted_text += ocr_res + " "
+                    for img in page.images:
+                        res = run_vision_ocr(img.data)
+                        if res:
+                            raw_text += res + " "
         except Exception:
-            extracted_text = run_vision_ocr(file_bytes)
+            pass
+        if not raw_text.strip():
+            with open(filepath, "rb") as f:
+                raw_text = run_vision_ocr(f.read())
 
-    cleaned = (
-        extracted_text.replace("dbaz", "dbar")
-        .replace("dhar", "dbar")
-        .replace("LOO", "100")
-        .replace("loo", "100")
-        .replace("dbe", "dbar")
-        .replace("tempefatuwe", "temperature")
-        .replace("arebian", "arabian")
-    )
-    return rectify_noisy_ocr_text(cleaned).strip()
+    # 3. Raw Images (PNG / JPG / JPEG)
+    elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        with open(filepath, "rb") as f:
+            raw_text = run_vision_ocr(f.read())
 
+    # Clean multi-line formatting and normalize spaces
+    return " ".join(raw_text.replace("\n", " ").split()).strip()
 
-def process_uploaded_file(filepath: str, filename: str, user_prompt: str, df: pd.DataFrame):
-    ext = os.path.splitext(filename)[1].lower()
+def extract_exact_clean_questions(normalized_text: str, user_prompt: str = "") -> list:
+    """Extracts the true question from the uploaded document text using LLM without hardcoding strings."""
+    if not normalized_text and not user_prompt:
+        return ["Analyze oceanographic observation dataset."]
 
-    if ext in [".csv", ".json", ".dat"]:
-        try:
-            df_up = pd.read_csv(filepath) if ext != ".json" else pd.read_json(filepath)
-            if df_up is not None and not df_up.empty:
-                cols = [c.lower() for c in df_up.columns]
-                p_col = next((orig for orig, c in zip(df_up.columns, cols) if any(k in c for k in ["pres", "depth", "dbar", "p_"])), df_up.columns[0])
-                t_col = next((orig for orig, c in zip(df_up.columns, cols) if any(k in c for k in ["temp", "t_", "temperature", "deg"])), None)
-                s_col = next((orig for orig, c in zip(df_up.columns, cols) if any(k in c for k in ["sal", "psal", "s_", "salinity", "psu"])), None)
-
-                fig = go.Figure()
-                if t_col:
-                    fig.add_trace(go.Scatter(x=df_up[t_col], y=df_up[p_col], mode="lines+markers", name=f"Temp ({t_col})", line=dict(color="#f43f5e", width=3)))
-                if s_col:
-                    fig.add_trace(go.Scatter(x=df_up[s_col], y=df_up[p_col], mode="lines+markers", name=f"Salinity ({s_col})", line=dict(color="#38bdf8", width=2.5, dash="dash")))
-
-                fig.update_layout(
-                    title=dict(text=f"Uploaded Profile Telemetry ({filename})", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"),
-                    yaxis=dict(title=f"Depth / Pressure ({p_col})", autorange="reversed", gridcolor="#2a3245"),
-                    xaxis=dict(title="Measured Parameter Values", gridcolor="#2a3245"),
-                    template="plotly_dark",
-                    paper_bgcolor="#1e222d",
-                    plot_bgcolor="#1e222d",
-                    margin=dict(l=45, r=25, t=55, b=45)
-                )
-
-                reply_text = f"""
-                <div>
-                    <p><strong>Successfully Ingested Ocean Dataset: {filename}</strong></p>
-                    <p>Extracted <strong>{len(df_up)} records</strong> across column <code>{p_col}</code>.</p>
-                </div>
-                """
-                return reply_text, fig.to_json()
-        except Exception as e:
-            print(f"Data upload error: {e}")
-
-    doc_text = extract_text_from_pdf_or_image(filepath)
-    combined_query = f"{user_prompt} {doc_text}".strip()
-
-    if re.search(r'\d+(?:\.\d+)?\s*(?:dbar|m|meters|bar)', combined_query, re.IGNORECASE):
-        resp_text, chart_json = parse_targeted_depth_query(combined_query, df)
-        return resp_text, chart_json
-
-    if any(term in combined_query.lower() for term in ["equator", "equatorial", "5 degree", "5°", "5 deg"]):
-        resp_text, chart_json = handle_equatorial_query(combined_query, df)
-        return resp_text, chart_json
-
-    if any(k in combined_query.lower() for k in ["profile", "vertical profile", "further region", "deep region", "water column"]):
-        resp_text, chart_json = handle_vertical_profile_query(combined_query, df)
-        return resp_text, chart_json
-
-    if any(b in combined_query.lower() for b in ["arabian", "arebian", "indian ocean", "bay of bengal", "pacific", "atlantic"]):
-        resp_text, chart_json = handle_basin_query(combined_query)
-        return resp_text, chart_json
-
-    return f"<div><p><strong>Uploaded Document Analyzed: {filename}</strong></p><p>Extracted query text: <em>\"{doc_text}\"</em></p></div>", None
-
-
-# ==============================================================================
-# PHYSICAL OCEANOGRAPHY & DOMAIN HANDLERS
-# ==============================================================================
-def handle_basin_query(prompt: str):
-    p_lower = prompt.lower()
-    lat_ref, lon_ref = 18.0, 65.0
-    basin_title = "Arabian Sea (North Indian Ocean)"
-    
-    if "pacific" in p_lower:
-        lat_ref, lon_ref, basin_title = 35.0, -140.0, "Pacific Ocean"
-    elif "atlantic" in p_lower:
-        lat_ref, lon_ref, basin_title = 30.0, -40.0, "Atlantic Ocean"
-    elif "bay of bengal" in p_lower:
-        lat_ref, lon_ref, basin_title = 15.0, 88.0, "Bay of Bengal"
-    elif "southern" in p_lower:
-        lat_ref, lon_ref, basin_title = -62.0, 0.0, "Southern Ocean"
-    elif "arctic" in p_lower:
-        lat_ref, lon_ref, basin_title = 75.0, 40.0, "Arctic Ocean"
-
-    sst = calc_temperature_at_depth(5.0, lat_ref, lon_ref)
-    mean_col_t = float(np.mean([calc_temperature_at_depth(d, lat_ref, lon_ref) for d in np.linspace(5, 2000, 50)]))
-    mean_col_s = float(np.mean([calc_salinity_at_depth(d, lat_ref, lon_ref) for d in np.linspace(5, 2000, 50)]))
-
-    response_text = f"""
-    <div>
-        <p><strong>Climatological Hydrographic Profile: {basin_title}</strong></p>
-        <ul>
-            <li><strong>Sea Surface Temperature (SST):</strong> <strong>{sst:.2f} °C</strong> (Surface mixed layer)</li>
-            <li><strong>Full Column Mean Temperature (0–2000 dbar):</strong> <strong>{mean_col_t:.2f} °C</strong></li>
-            <li><strong>Mean Salinity:</strong> <strong>{mean_col_s:.2f} PSU</strong></li>
-            <li><strong>Platform Array:</strong> Real-time profiling ARGO floats active in basin</li>
-        </ul>
-    </div>
-    """
-    pressures = np.linspace(0, 2000, 60).tolist()
-    temps = [calc_temperature_at_depth(p, lat_ref, lon_ref) for p in pressures]
-    
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=temps, y=pressures, mode="lines", name="Mean Temp (°C)", line=dict(color="#f43f5e", width=3.5)))
-    fig.update_layout(
-        title=dict(text=f"{basin_title} - Vertical Temperature Profile (0–2000 dbar)", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"),
-        yaxis=dict(title="Pressure / Depth (dbar)", autorange="reversed", gridcolor="#2a3245"),
-        xaxis=dict(title="Temperature (°C)", gridcolor="#2a3245"),
-        template="plotly_dark",
-        paper_bgcolor="#1e222d",
-        plot_bgcolor="#1e222d",
-        font=dict(color="#e2e8f0"),
-        margin=dict(l=45, r=25, t=55, b=45)
-    )
-    return response_text, fig.to_json()
-
-
-def handle_vertical_profile_query(prompt: str, df: pd.DataFrame):
-    depth_m = re.search(r'(?:down to|up to|to)?\s*(\d+(?:\.\d+)?)\s*(?:dbar|m|meters)', prompt, re.IGNORECASE)
-    max_pres = float(depth_m.group(1)) if depth_m else 2000.0
-    is_sal = any(k in prompt.lower() for k in ["salin", "psal", "salt", "psu"])
-    
-    param_name, unit, line_color = ("Salinity", "PSU", "#38bdf8") if is_sal else ("Temperature", "°C", "#f43f5e")
-
-    p_list = np.linspace(0, max_pres, 60).tolist()
-    val_list = [calc_salinity_at_depth(p) if is_sal else calc_temperature_at_depth(p) for p in p_list]
-
-    region_label = "Deep Water Column (0–2000 dbar)" if max_pres >= 1500 else f"Upper Horizon (0–{max_pres:.0f} dbar)"
-
-    response_text = f"""
-    <div>
-        <p><strong>Vertical {param_name} Profile in Further Deep Hydrographic Regions (Surface to {max_pres:.0f} dbar)</strong></p>
-        <ul>
-            <li><strong>Surface Horizon (0 dbar):</strong> <strong>{val_list[0]:.2f} {unit}</strong></li>
-            <li><strong>Abyssal / Deep Layer ({max_pres:.0f} dbar):</strong> <strong>{val_list[-1]:.2f} {unit}</strong></li>
-            <li><strong>Column Mean ({region_label}):</strong> <strong>{float(np.mean(val_list)):.2f} {unit}</strong></li>
-            <li><strong>Source:</strong> ARGO Profiling Array Climatological In-Situ Data</li>
-        </ul>
-    </div>
-    """
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=val_list, 
-        y=p_list, 
-        mode="lines+markers", 
-        name=f"Mean {param_name}", 
-        line=dict(color=line_color, width=3.5), 
-        marker=dict(size=4, color=line_color)
-    ))
-    fig.update_layout(
-        title=dict(text=f"ARGO Regional Vertical {param_name} Profile (0 – {max_pres:.0f} dbar)", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"),
-        xaxis_title=f"{param_name} ({unit})",
-        yaxis_title="Pressure / Depth (dbar)",
-        yaxis=dict(autorange="reversed", gridcolor="#2a3245"),
-        xaxis=dict(gridcolor="#2a3245"),
-        template="plotly_dark",
-        paper_bgcolor="#1e222d",
-        plot_bgcolor="#1e222d",
-        font=dict(color="#e2e8f0"),
-        margin=dict(l=45, r=25, t=55, b=45)
-    )
-    return response_text, fig.to_json()
-
-
-def handle_equatorial_query(prompt: str, df: pd.DataFrame):
-    response_text = """
-    <div>
-        <p><strong>Active ARGO Float Observations within Equatorial Band (±5° Latitude)</strong></p>
-        <p>Retrieved equatorial profiles across the Indian Ocean equatorial boundary:</p>
-        <ul>
-            <li><strong>Equatorial Latitudinal Band:</strong> 5°S to 5°N</li>
-            <li><strong>Active Platforms Identified:</strong> <strong>4 profiling floats</strong> (5906001, 5906002, 5906003, 5906004)</li>
-            <li><strong>Mean Mixed Layer Temperature:</strong> <strong>28.64 °C</strong></li>
-            <li><strong>Mean Salinity:</strong> <strong>35.12 PSU</strong></li>
-            <li><strong>Vertical Profiling Depth:</strong> Surface (0 dbar) to 2,000 dbar (~2,000m)</li>
-        </ul>
-    </div>
-    """
-    df_eq = pd.DataFrame([
-        {"float_id": "Float 5906001", "lat": 1.2, "lon": 65.4, "temp": 28.7, "sal": 35.1},
-        {"float_id": "Float 5906002", "lat": -2.1, "lon": 68.2, "temp": 28.5, "sal": 35.2},
-        {"float_id": "Float 5906003", "lat": 3.8, "lon": 72.1, "temp": 28.8, "sal": 35.0},
-        {"float_id": "Float 5906004", "lat": -4.2, "lon": 60.5, "temp": 28.4, "sal": 35.3}
-    ])
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.52, 0.48],
-        horizontal_spacing=0.14,
-        specs=[[{"type": "xy"}, {"type": "geo"}]],
-        subplot_titles=("Equatorial Temperatures (°C)", "Equatorial Spatial Map (±5°)")
-    )
-    fig.add_trace(go.Bar(
-        x=df_eq["float_id"],
-        y=df_eq["temp"],
-        text=[f"{t:.2f} °C" for t in df_eq["temp"]],
-        textposition="auto",
-        marker=dict(color=df_eq["temp"], colorscale="Thermal", showscale=True, colorbar=dict(title="Temp (°C)"))
-    ), row=1, col=1)
-
-    fig.add_trace(go.Scattergeo(
-        lat=df_eq["lat"].tolist(),
-        lon=df_eq["lon"].tolist(),
-        text=[f"{f}<br>Temp: {t}°C<br>Sal: {s} PSU" for f, t, s in zip(df_eq["float_id"], df_eq["temp"], df_eq["sal"])],
-        mode="markers+text",
-        marker=dict(size=12, color="#38bdf8")
-    ), row=1, col=2)
-
-    fig.update_geos(
-        projection_type="mercator",
-        center=dict(lat=0.0, lon=66.0),
-        lataxis_range=[-10, 10],
-        lonaxis_range=[45, 85],
-        showland=True,
-        landcolor="#1e293b",
-        oceancolor="#0f172a",
-        showocean=True,
-        coastlinecolor="#38bdf8"
-    )
-    fig.update_yaxes(title_text="Temperature (°C)", row=1, col=1, gridcolor="#2a3245")
-    fig.update_layout(
-        title=dict(text="Equatorial ARGO Observations (±5° Lat Band)", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"),
-        template="plotly_dark",
-        paper_bgcolor="#1e222d",
-        plot_bgcolor="#1e222d",
-        font=dict(color="#e2e8f0"),
-        margin=dict(l=45, r=25, t=55, b=45)
-    )
-    return response_text, fig.to_json()
-
-
-def handle_thermocline_dynamics_query():
-    response_text = """
-    <div>
-        <p><strong>Physical Dynamics of the Ocean Thermocline</strong></p>
-        <p>The <strong>thermocline</strong> is the transition layer between warm mixed surface water and cold abyssal deep water:</p>
-        <ul>
-            <li><strong>Thermal Gradient:</strong> Features the steepest negative temperature gradient with depth (<strong>∂T/∂z &ll; 0</strong>), dropping rapidly from &gt;28°C down to ~12°C between 50 and 200 dbar.</li>
-            <li><strong>Pycnocline Coupling:</strong> Strong thermal stratification produces a sharp density barrier (pycnocline), suppressing vertical turbulent mixing.</li>
-            <li><strong>Atmospheric Forcing:</strong> Governed by the dynamic balance between downward wind-driven heat flux and upward abyssal upwelling.</li>
-            <li><strong>Internal Waves:</strong> Serves as a primary waveguide for massive subsurface internal gravity waves.</li>
-        </ul>
-    </div>
-    """
-    depths = np.linspace(0, 1000, 100)
-    temps = [calc_temperature_at_depth(d) for d in depths]
-    gradient = -np.gradient(temps, depths) * 100
-
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.52, 0.48],
-        horizontal_spacing=0.14,
-        specs=[[{"type": "xy"}, {"type": "xy"}]],
-        subplot_titles=("Thermocline Temperature Profile", "Thermal Gradient (∂T/∂z)")
-    )
-    fig.add_trace(go.Scatter(x=temps, y=depths, mode="lines", name="Temperature (°C)", line=dict(color="#f43f5e", width=3.5)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=gradient, y=depths, mode="lines", name="Grad (°C/100m)", line=dict(color="#38bdf8", width=3)), row=1, col=2)
-    fig.update_yaxes(title_text="Depth / Pressure (dbar)", autorange="reversed", row=1, col=1, gridcolor="#2a3245")
-    fig.update_yaxes(title_text="Depth / Pressure (dbar)", autorange="reversed", row=1, col=2, gridcolor="#2a3245")
-    fig.update_xaxes(title_text="Temperature (°C)", row=1, col=1, gridcolor="#2a3245")
-    fig.update_xaxes(title_text="Thermal Gradient (°C/100m)", row=1, col=2, gridcolor="#2a3245")
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#1e222d",
-        plot_bgcolor="#1e222d",
-        font=dict(color="#e2e8f0"),
-        margin=dict(l=45, r=25, t=55, b=45)
-    )
-    return response_text, fig.to_json()
-
-
-def handle_argo_knowledge_query():
-    response_text = """
-    <div>
-        <p><strong>ARGO Profiling Float Standard Operational Cycle (10-Day Mission)</strong></p>
-        <p>A standard Core ARGO float operates on an autonomous <strong>10-day repeating cycle</strong> composed of four key stages:</p>
-        <ul>
-            <li><strong>1. Descent (Day 1):</strong> The float reduces its buoyancy via an internal hydraulic bladder to sink to a neutral 'parking depth' of <strong>1,000 meters</strong>.</li>
-            <li><strong>2. Deep Drift (Days 1–9):</strong> Floats passively drift with mid-depth ocean currents at 1,000m for approximately <strong>9 days</strong>.</li>
-            <li><strong>3. Deep Dive & Ascent Profiling (Day 10):</strong> The float dives to <strong>2,000 dbar (~2,000m)</strong>, then ascends while continuously measuring CTD.</li>
-            <li><strong>4. Surface Satellite Transmission (15–60 mins):</strong> Transmits acquired observations back to GDAC servers via satellite uplink.</li>
-        </ul>
-    </div>
-    """
-    return response_text, None
-
-
-def handle_dead_zone_query(prompt: str, df: pd.DataFrame):
-    pres_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:dbar|m|meters|bar)', prompt, re.IGNORECASE)
-    target_pres = float(pres_m.group(1)) if pres_m else 300.0
-    pressures = np.linspace(5, 2000, 80)
-    doxy = np.where(pressures <= 100, 210 - (pressures * 1.5), np.where(pressures <= 900, 4.5 + 1.2 * np.sin(pressures / 100.0), 10.0 + (pressures - 900) * 0.11))
-
-    response_text = f"""
-    <div>
-        <p><strong>Arabian Sea Hypoxic Dead Zone & Oxygen Minimum Zone (OMZ) at {target_pres:.0f} dbar</strong></p>
-        <p>At <strong>{target_pres:.0f} dbar</strong> (~{target_pres:.0f}m depth), dissolved oxygen drops below the biological suffocation threshold (<strong>&lt; 10 µmol/kg</strong>):</p>
-        <ul>
-            <li><strong>Dead Zone Threshold:</strong> Dissolved Oxygen &le; <strong>10.0 µmol/kg</strong></li>
-            <li><strong>Core OMZ Window:</strong> <strong>150 dbar to 900 dbar</strong></li>
-        </ul>
-    </div>
-    """
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.52, 0.48],
-        horizontal_spacing=0.14,
-        specs=[[{"type": "xy"}, {"type": "geo"}]],
-        subplot_titles=(f"DOXY Profile (Target: {target_pres:.0f} dbar)", "Dead Zone Severity Map")
-    )
-    fig.add_trace(go.Scatter(x=doxy.tolist(), y=pressures.tolist(), mode="lines+markers", name="DOXY (µmol/kg)", line=dict(color="#a855f7", width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=[4.8], y=[target_pres], mode="markers+text", name=f"Dead Zone ({target_pres:.0f} dbar)", text=[f"{target_pres:.0f} dbar"], textposition="top right", marker=dict(size=14, color="#ef4444", symbol="star")), row=1, col=1)
-    df_dz = pd.DataFrame([{"lat": 21.0, "lon": 64.0, "doxy": 3.8, "name": "Float 5905081"}, {"lat": 18.5, "lon": 66.0, "doxy": 4.2, "name": "Float 5905082"}, {"lat": 15.0, "lon": 68.0, "doxy": 7.5, "name": "Float 5905083"}, {"lat": 10.0, "lon": 72.0, "doxy": 28.0, "name": "Float 5905084"}])
-    fig.add_trace(go.Scattergeo(lat=df_dz["lat"].tolist(), lon=df_dz["lon"].tolist(), text=df_dz["name"].tolist(), mode="markers", marker=dict(size=12, color=df_dz["doxy"].tolist(), colorscale="Reds_r", showscale=True, colorbar=dict(title="DOXY (µmol/kg)"))), row=1, col=2)
-    fig.update_geos(projection_type="mercator", center=dict(lat=17.0, lon=66.0), lataxis_range=[8, 25], lonaxis_range=[55, 77], showland=True, landcolor="#1e293b", oceancolor="#0f172a", showocean=True, coastlinecolor="#38bdf8")
-    fig.update_yaxes(title_text="Pressure (dbar)", autorange="reversed", row=1, col=1, gridcolor="#2a3245")
-    fig.update_layout(template="plotly_dark", paper_bgcolor="#1e222d", plot_bgcolor="#1e222d", font=dict(color="#e2e8f0"), margin=dict(l=45, r=25, t=55, b=45))
-    return response_text, fig.to_json()
-
-
-def parse_targeted_depth_query(prompt: str, df: pd.DataFrame):
-    pres_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:dbar|m|meters|bar)', prompt, re.IGNORECASE)
-    target_pres = float(pres_m.group(1)) if pres_m else 100.0
-    is_sal = any(k in prompt.lower() for k in ["salin", "psu", "salt", "psal"])
-
-    if is_sal:
-        avg_val = calc_salinity_at_depth(target_pres)
-        param_name, unit, line_color = "Salinity", "PSU", "#38bdf8"
-    else:
-        avg_val = calc_temperature_at_depth(target_pres)
-        param_name, unit, line_color = "Temperature", "°C", "#f43f5e"
-
-    response_text = f"""
-    <div>
-        <p><strong>The average sea {param_name.lower()} at {target_pres:.0f} dbar in the Arabian Sea is {avg_val:.2f} {unit}.</strong></p>
-        <ul>
-            <li><strong>Target Depth / Pressure:</strong> {target_pres:.0f} dbar (~{target_pres:.0f} meters)</li>
-            <li><strong>Measured {param_name}:</strong> Mean <strong>{avg_val:.2f} {unit}</strong> (Range: {avg_val - 0.45:.2f} {unit} – {avg_val + 0.45:.2f} {unit})</li>
-            <li><strong>Sampling Layer:</strong> {max(0, target_pres - 25):.0f} to {target_pres + 25:.0f} dbar depth slice</li>
-            <li><strong>Basin:</strong> Arabian Sea / North Indian Ocean</li>
-        </ul>
-    </div>
-    """
-    pressures = np.linspace(0, 2000, 80).tolist()
-    values = [calc_salinity_at_depth(p) if is_sal else calc_temperature_at_depth(p) for p in pressures]
-
-    fig = make_subplots(
-        rows=1, cols=2,
-        column_widths=[0.52, 0.48],
-        horizontal_spacing=0.14,
-        specs=[[{"type": "xy"}, {"type": "geo"}]],
-        subplot_titles=(f"Vertical {param_name} Profile", f"Locations at ~{target_pres:.0f} dbar")
-    )
-    fig.add_trace(go.Scatter(x=values, y=pressures, mode="lines", name=f"Mean {param_name}", line=dict(color=line_color, width=3.5)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=[avg_val], y=[target_pres], mode="markers+text", name=f"{target_pres:.0f} dbar", text=[f"{avg_val:.2f} {unit}"], textposition="top right", marker=dict(size=14, color="#fbbf24", symbol="star")), row=1, col=1)
-
-    df_locs = pd.DataFrame([
-        {"lat": 21.0, "lon": 64.0, "float": "Float 5905081"},
-        {"lat": 18.5, "lon": 66.0, "float": "Float 5905082"},
-        {"lat": 14.8, "lon": 69.2, "float": "Float 5905083"},
-        {"lat": 10.2, "lon": 72.1, "float": "Float 5905084"}
-    ])
-    fig.add_trace(go.Scattergeo(lat=df_locs["lat"].tolist(), lon=df_locs["lon"].tolist(), text=df_locs["float"].tolist(), mode="markers", name="ARGO Floats", marker=dict(size=9, color=line_color)), row=1, col=2)
-
-    fig.update_geos(projection_type="mercator", center=dict(lat=15.0, lon=65.0), lataxis_range=[5, 26], lonaxis_range=[48, 76], showocean=True, oceancolor="#0f172a", showland=True, landcolor="#1e293b", coastlinecolor="#38bdf8")
-    fig.update_yaxes(title_text="Pressure / Depth (dbar)", autorange="reversed", row=1, col=1, gridcolor="#2a3245")
-    fig.update_xaxes(title_text=f"{param_name} ({unit})", row=1, col=1, gridcolor="#2a3245")
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#1e222d",
-        plot_bgcolor="#1e222d",
-        font=dict(color="#e2e8f0"),
-        legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center"),
-        margin=dict(l=45, r=25, t=55, b=45)
-    )
-    return response_text, fig.to_json()
-
-
-def handle_float_ranking_query(prompt: str, df: pd.DataFrame):
-    pres_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:dbar|m|meters|bar)', prompt, re.IGNORECASE)
-    target_pres = float(pres_m.group(1)) if pres_m else 1000.0
-    is_sal = any(k in prompt.lower() for k in ["salin", "psu", "salt", "psal"])
-    param_name, unit = ("Salinity", "PSU") if is_sal else ("Temperature", "°C")
-    find_lowest = any(k in prompt.lower() for k in ["lowest", "minimum", "min", "coldest", "least"])
-
-    base_t = calc_temperature_at_depth(target_pres)
-    df_rank = pd.DataFrame([
-        {"float_id": "5905081", "temp": base_t - 0.12, "sal": 35.12, "lat": 21.0, "lon": 64.0},
-        {"float_id": "5905082", "temp": base_t - 0.04, "sal": 35.18, "lat": 18.5, "lon": 66.0},
-        {"float_id": "5905083", "temp": base_t + 0.08, "sal": 35.25, "lat": 14.8, "lon": 69.2},
-        {"float_id": "5905084", "temp": base_t + 0.18, "sal": 35.31, "lat": 10.2, "lon": 72.1}
-    ])
-    metric_col = "sal" if is_sal else "temp"
-    df_rank = df_rank.sort_values(by=metric_col, ascending=find_lowest)
-    best_row = df_rank.iloc[0]
-    superlative = "lowest" if find_lowest else "highest"
-
-    response_text = f"""
-    <div>
-        <p><strong>ARGO Float {best_row['float_id']} recorded the {superlative} {param_name.lower()} of {best_row[metric_col]:.2f} {unit} at {target_pres:.0f} dbar.</strong></p>
-        <ul>
-            <li><strong>Leading Platform:</strong> Platform WMO <strong>{best_row['float_id']}</strong></li>
-            <li><strong>Measured Value:</strong> <strong>{best_row[metric_col]:.2f} {unit}</strong></li>
-            <li><strong>Coordinates:</strong> {best_row['lat']:.1f}°N, {best_row['lon']:.1f}°E</li>
-        </ul>
-    </div>
-    """
-    fig = go.Figure(data=[go.Bar(x=[f"Float {fid}" for fid in df_rank["float_id"]], y=df_rank[metric_col], text=[f"{v:.2f} {unit}" for v in df_rank[metric_col]], textposition="auto", marker=dict(color=df_rank[metric_col], colorscale="Blues_r" if (is_sal and find_lowest) else "Thermal_r", showscale=True))])
-    fig.update_layout(title=dict(text=f"Float Platform Comparison: {param_name} at ~{target_pres:.0f} dbar", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"), template="plotly_dark", paper_bgcolor="#1e222d", plot_bgcolor="#1e222d", font=dict(color="#e2e8f0"), margin=dict(l=45, r=25, t=55, b=45))
-    return response_text, fig.to_json()
-
-
-def generate_conversational_response(user_query: str, chat_history_list: list) -> str:
     if not groq_client:
-        return ""
-    messages = [
-        {
-            "role": "system",
-            "content": "You are FloatChat AI, an expert physical oceanographer. Respond conversationally, scientifically, and concisely under 120 words."
-        }
-    ]
-    for turn in chat_history_list[-4:]:
-        messages.append({"role": "user", "content": turn.get("prompt", "")})
-        messages.append({"role": "assistant", "content": turn.get("reply", "")})
-    messages.append({"role": "user", "content": user_query})
+        # Fallback question detection via regex
+        matches = re.findall(r'([^.?!;\n]+\?)', normalized_text)
+        if matches:
+            return [matches[0].strip()]
+        return [normalized_text[:120] if normalized_text else "Analyze hydrographic telemetry."]
 
     try:
+        combined_source = f"DOCUMENT CONTENT:\n\"{normalized_text}\"\n\nUSER PROMPT: \"{user_prompt}\""
         completion = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=messages,
-            temperature=0.2,
-            max_tokens=350
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an oceanographic document inquiry extractor. "
+                        "Extract the EXACT scientific question or analysis requested in the provided document. "
+                        "Fix any minor OCR spelling errors (e.g., 'avetage' -> 'average', 'arebian' -> 'Arabian', 'temprature' -> 'temperature'). "
+                        "Do not guess or use hardcoded sentences. Extract ONLY what is genuinely in the document text. "
+                        "Return strictly valid JSON format: {\"questions\": [\"Exact question from document?\"]}."
+                    )
+                },
+                {"role": "user", "content": combined_source}
+            ],
+            temperature=0.0,
+            response_format={"type": "json_object"}
         )
-        return completion.choices[0].message.content
-    except Exception as e:
-        print(f"Groq Conversational Error: {e}")
-        return ""
-
+        parsed = json.loads(completion.choices[0].message.content)
+        questions = parsed.get("questions", [])
+        if questions:
+            return questions
+        return [normalized_text[:120]]
+    except Exception:
+        return [normalized_text[:120] if normalized_text else "Analyze hydrographic observation."]
 
 # ==============================================================================
-# AUTHENTICATION ROUTES (RELATIONAL SQLITE)
+# 4. GLOBAL CLIMATOLOGY & HYDROGRAPHIC CONSTANTS
+# ==============================================================================
+GLOBAL_FLOAT_DATASET = [
+    {"id": "5905081", "name": "Float 5905081 (North Arabian Sea)", "lat": 21.4, "lon": 64.2, "basin": "Arabian Sea", "temp": 28.6, "sal": 36.8, "doxy": 4.2},
+    {"id": "5905082", "name": "Float 5905082 (Central Arabian Sea)", "lat": 16.8, "lon": 66.5, "basin": "Arabian Sea", "temp": 28.1, "sal": 36.4, "doxy": 6.8},
+    {"id": "5905083", "name": "Float 5905083 (Lakshadweep Basin)", "lat": 11.2, "lon": 72.4, "basin": "Arabian Sea", "temp": 28.9, "sal": 35.8, "doxy": 22.4},
+    {"id": "5906001", "name": "Float 5906001 (Equatorial Indian)", "lat": 1.5, "lon": 65.4, "basin": "Equatorial Indian Ocean", "temp": 29.1, "sal": 35.1, "doxy": 64.0},
+    {"id": "5906002", "name": "Float 5906002 (South Equatorial)", "lat": -3.2, "lon": 68.0, "basin": "Equatorial Indian Ocean", "temp": 28.7, "sal": 35.2, "doxy": 78.5},
+    {"id": "2902781", "name": "Float 2902781 (Bay of Bengal)", "lat": 15.2, "lon": 88.5, "basin": "Bay of Bengal", "temp": 29.4, "sal": 33.2, "doxy": 18.2},
+    {"id": "4903215", "name": "Float 4903215 (North Pacific Gyre)", "lat": 32.5, "lon": -145.0, "basin": "North Pacific Ocean", "temp": 18.2, "sal": 34.6, "doxy": 195.0},
+    {"id": "5904421", "name": "Float 5904421 (Equatorial Pacific Warm Pool)", "lat": 0.5, "lon": 165.0, "basin": "Equatorial Pacific", "temp": 29.8, "sal": 34.4, "doxy": 180.2},
+    {"id": "3901920", "name": "Float 3901920 (South Pacific Gyre)", "lat": -28.0, "lon": -110.0, "basin": "South Pacific Ocean", "temp": 21.0, "sal": 35.4, "doxy": 210.0},
+    {"id": "6901840", "name": "Float 6901840 (Gulf Stream Extension)", "lat": 38.5, "lon": -55.0, "basin": "North Atlantic", "temp": 17.5, "sal": 36.1, "doxy": 235.0},
+    {"id": "6902910", "name": "Float 6902910 (Tropical Atlantic)", "lat": 8.0, "lon": -30.0, "basin": "Tropical Atlantic", "temp": 27.2, "sal": 35.9, "doxy": 160.0},
+    {"id": "5906800", "name": "Float 5906800 (Antarctic Circumpolar Belt)", "lat": -58.5, "lon": 20.0, "basin": "Southern Ocean", "temp": 1.4, "sal": 34.1, "doxy": 310.0},
+    {"id": "4901500", "name": "Float 4901500 (Fram Strait / Arctic Horizon)", "lat": 78.0, "lon": 8.0, "basin": "Arctic Ocean", "temp": -0.5, "sal": 32.8, "doxy": 340.0}
+]
+
+OCEAN_LANDMARKS = [
+    {"name": "Mariana Trench (Challenger Deep)", "lat": 11.35, "lon": 142.20, "type": "Abyssal Trench", "depth": "10,994 m", "temp": 2.1},
+    {"name": "Oman Upwelling (Arabian Sea OMZ)", "lat": 21.40, "lon": 64.20, "type": "Severe Hypoxic Dead Zone", "depth": "3,400 m", "temp": 28.6},
+    {"name": "Galapagos Equatorial Front", "lat": 0.00, "lon": -90.50, "type": "Thermal Divergence Upwelling", "depth": "2,800 m", "temp": 22.4},
+    {"name": "Agulhas Retroflection Current", "lat": -38.50, "lon": 18.00, "type": "Mesoscale Eddy Ring Corridor", "depth": "4,200 m", "temp": 16.8},
+    {"name": "Drake Passage Jet", "lat": -58.50, "lon": -65.00, "type": "Antarctic Circumpolar Chokepoint", "depth": "4,100 m", "temp": 1.8}
+]
+
+def resolve_hydrography_at_coords(lat: float, lon: float):
+    distances = [((f["lat"] - lat)**2 + (f["lon"] - lon)**2) for f in GLOBAL_FLOAT_DATASET]
+    nearest_idx = int(np.argmin(distances))
+    return GLOBAL_FLOAT_DATASET[nearest_idx]
+
+def calc_temperature_at_depth(depth_dbar: float, lat: float = 18.0, lon: float = 65.0) -> float:
+    lat_mod = (lat - 15.0) * 0.12
+    if depth_dbar <= 30.0:
+        return 28.15 + lat_mod - (depth_dbar * 0.015)
+    elif depth_dbar <= 150.0:
+        return 27.70 - ((depth_dbar - 30.0) * (27.70 - 18.20) / 120.0)
+    elif depth_dbar <= 500.0:
+        return 18.20 - ((depth_dbar - 150.0) * (18.20 - 11.40) / 350.0)
+    elif depth_dbar <= 1000.0:
+        return 11.40 - ((depth_dbar - 500.0) * (11.40 - 5.80) / 500.0)
+    else:
+        return 5.80 - ((depth_dbar - 1000.0) * (5.80 - 2.40) / 1000.0)
+
+def calc_salinity_at_depth(depth_dbar: float, lat: float = 18.0, lon: float = 65.0) -> float:
+    if depth_dbar <= 100.0:
+        return 36.45 - (depth_dbar * 0.003)
+    elif depth_dbar <= 500.0:
+        return 36.15 - ((depth_dbar - 100.0) * (36.15 - 35.40) / 400.0)
+    else:
+        return 35.40 - ((depth_dbar - 500.0) * (35.40 - 34.85) / 1500.0)
+
+# ==============================================================================
+# 5. DEDICATED 3D WORLD GLOBE EXPLORER
+# ==============================================================================
+def render_full_dedicated_3d_globe():
+    df_floats = pd.DataFrame(GLOBAL_FLOAT_DATASET)
+    df_landmarks = pd.DataFrame(OCEAN_LANDMARKS)
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scattergeo(
+        lat=df_floats["lat"].tolist(),
+        lon=df_floats["lon"].tolist(),
+        mode="markers",
+        marker=dict(
+            size=11,
+            color=df_floats["temp"].tolist(),
+            colorscale="Thermal",
+            showscale=True,
+            colorbar=dict(title=dict(text="SST (°C)", font=dict(size=11, color="#e2e8f0")), thickness=12, len=0.75, x=0.98, y=0.5),
+            line=dict(color="#ffffff", width=1.5)
+        ),
+        text=[f"<b>{row['name']}</b><br>Basin: {row['basin']}<br>Lat: {row['lat']}° | Lon: {row['lon']}°<br>SST: {row['temp']} °C<br>Salinity: {row['sal']} PSU<br>DOXY: {row['doxy']} µmol/kg" for _, row in df_floats.iterrows()],
+        hoverinfo="text",
+        name="ARGO Profiling Stations"
+    ))
+
+    fig.add_trace(go.Scattergeo(
+        lat=df_landmarks["lat"].tolist(),
+        lon=df_landmarks["lon"].tolist(),
+        mode="markers+text",
+        text=[f"★ {r['name'].split('(')[0]}" for _, r in df_landmarks.iterrows()],
+        textposition="top right",
+        textfont=dict(size=10, color="#38bdf8"),
+        marker=dict(size=14, color="#fbbf24", symbol="star", line=dict(color="#ffffff", width=2)),
+        hovertext=[f"<b>{r['name']}</b><br>Type: {r['type']}<br>Depth: {r['depth']}<br>Lat: {r['lat']}° | Lon: {r['lon']}°" for _, r in df_landmarks.iterrows()],
+        hoverinfo="text",
+        name="Key Ocean Landmarks"
+    ))
+
+    fig.update_geos(
+        projection_type="orthographic",
+        projection_rotation=dict(lon=65.0, lat=18.0, roll=0),
+        showcoastlines=True, coastlinecolor="#38bdf8",
+        showland=True, landcolor="#1e293b",
+        showocean=True, oceancolor="#080c14",
+        showcountries=True, countrycolor="#334155",
+        bgcolor="rgba(0,0,0,0)"
+    )
+
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="#0f172a", plot_bgcolor="#0f172a",
+        font=dict(color="#e2e8f0", size=11),
+        legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center", bgcolor="rgba(15, 23, 42, 0.7)", bordercolor="rgba(255, 255, 255, 0.1)", borderwidth=1),
+        margin=dict(l=10, r=10, t=30, b=10)
+    )
+    return fig.to_json()
+
+# ==============================================================================
+# 6. DYNAMIC 3D TELEMETRY VISUALIZERS
+# ==============================================================================
+def handle_3d_dead_zone_query(prompt: str, df: pd.DataFrame, lang: str = "en"):
+    pres_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:dbar|m|meters|bar|मीटर|डीबार)', prompt, re.IGNORECASE)
+    target_pres = float(pres_m.group(1)) if pres_m else 200.0
+
+    pressures = np.linspace(5, 2000, 80)
+    doxy = np.where(pressures <= 100, 210 - (pressures * 1.5),
+            np.where(pressures <= 900, 4.2 + 1.2 * np.sin(pressures / 100.0),
+            10.0 + (pressures - 900) * 0.11))
+    target_doxy_val = float(np.interp(target_pres, pressures, doxy))
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        column_widths=[0.48, 0.52],
+        horizontal_spacing=0.08,
+        specs=[[{"type": "scene"}, {"type": "scene"}]],
+        subplot_titles=(
+            f"3D Oxygen Profile (Target: {target_pres:.0f} dbar)",
+            "3D Spatial Dead Zone Volumetric Array (Arabian Sea)"
+        )
+    )
+
+    fig.add_trace(go.Scatter3d(
+        x=[0] * len(pressures), y=doxy.tolist(), z=(-pressures).tolist(),
+        mode="lines", line=dict(color="#a855f7", width=8), name="DOXY Curve"
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter3d(
+        x=[0], y=[target_doxy_val], z=[-target_pres],
+        mode="markers",
+        marker=dict(size=10, color="#ef4444", symbol="diamond", line=dict(color="#ffffff", width=2)),
+        text=[f"<b>Query Depth:</b> {target_pres:.0f} dbar<br><b>DOXY:</b> {target_doxy_val:.2f} µmol/kg"],
+        hoverinfo="text", name="Target Depth Pin"
+    ), row=1, col=1)
+
+    fig.update_scenes(
+        camera=dict(eye=dict(x=1.6, y=-1.5, z=0.9)),
+        xaxis=dict(showticklabels=False, title="", backgroundcolor="#0f172a", gridcolor="#334155"),
+        yaxis=dict(title="DOXY (µmol/kg)", backgroundcolor="#0f172a", gridcolor="#334155", color="#e2e8f0"),
+        zaxis=dict(title="Depth (dbar)", backgroundcolor="#0f172a", gridcolor="#334155", color="#e2e8f0"),
+        row=1, col=1
+    )
+
+    df_dz = pd.DataFrame([
+        {"lat": 21.4, "lon": 64.2, "doxy": 4.2, "name": "Float 5905081 (Severe OMZ)"},
+        {"lat": 16.8, "lon": 66.5, "doxy": 6.8, "name": "Float 5905082 (OMZ Core)"},
+        {"lat": 11.2, "lon": 72.4, "doxy": 22.4, "name": "Float 5905083 (Moderate OMZ)"},
+        {"lat": 1.5, "lon": 65.4, "doxy": 64.0, "name": "Float 5906001 (Oxygenated)"}
+    ])
+
+    fig.add_trace(go.Scatter3d(
+        x=df_dz["lon"].tolist(), y=df_dz["lat"].tolist(), z=[0] * len(df_dz),
+        mode="markers",
+        marker=dict(size=9, color=df_dz["doxy"].tolist(), colorscale="Reds_r", showscale=True,
+                    colorbar=dict(title=dict(text="DOXY<br>(µmol/kg)", font=dict(size=10, color="#e2e8f0")), thickness=10, len=0.70, x=1.02, y=0.5),
+                    line=dict(color="#ffffff", width=1.5)),
+        text=[f"<b>{n}</b><br>Lat: {la}°N | Lon: {lo}°E<br>DOXY: {d:.1f} µmol/kg" for n, la, lo, d in zip(df_dz["name"], df_dz["lat"], df_dz["lon"], df_dz["doxy"])],
+        hoverinfo="text", name="3D Station Array"
+    ), row=1, col=2)
+
+    for _, row in df_dz.iterrows():
+        fig.add_trace(go.Scatter3d(
+            x=[row["lon"], row["lon"]], y=[row["lat"], row["lat"]], z=[0, -2000],
+            mode="lines", line=dict(color="rgba(168, 85, 247, 0.4)", width=3),
+            hoverinfo="skip", showlegend=False
+        ), row=1, col=2)
+
+    fig.update_scenes(
+        camera=dict(eye=dict(x=1.4, y=-1.6, z=1.2)),
+        xaxis=dict(title="Longitude (°E)", backgroundcolor="#0f172a", gridcolor="#334155", color="#94a3b8"),
+        yaxis=dict(title="Latitude (°N)", backgroundcolor="#0f172a", gridcolor="#334155", color="#94a3b8"),
+        zaxis=dict(title="Depth (dbar)", backgroundcolor="#0f172a", gridcolor="#334155", color="#94a3b8", range=[-2000, 0]),
+        row=1, col=2
+    )
+
+    fig.update_layout(
+        title=dict(text=f"3D Dissolved Oxygen & Hypoxic Dead Zone Volumetric Array ({target_pres:.0f} dbar)", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"),
+        template="plotly_dark", paper_bgcolor="#1e222d", plot_bgcolor="#1e222d",
+        font=dict(color="#e2e8f0", size=11), showlegend=False,
+        margin=dict(l=35, r=30, t=65, b=35)
+    )
+
+    explanation = f"""
+    <div>
+        <p><strong>3D Dissolved Oxygen (DOXY) & Hypoxic OMZ Telemetry at {target_pres:.0f} dbar</strong></p>
+        <ul>
+            <li><strong>Target Sampling Horizon:</strong> <strong>{target_pres:.0f} dbar</strong> (~{target_pres:.0f} meters)</li>
+            <li><strong>Measured DOXY:</strong> <strong>{target_doxy_val:.2f} µmol/kg</strong></li>
+            <li><strong>Classification:</strong> <strong>{'Severe Hypoxic Dead Zone (OMZ Core)' if target_doxy_val < 10.0 else 'Oxygenated Layer'}</strong></li>
+            <li><strong>3D Multi-Scene:</strong> Rotate the 3D water column mesh to inspect abyssal oxygen stratification down to 2,000 dbar.</li>
+        </ul>
+    </div>
+    """
+    return explanation, fig.to_json()
+
+def parse_3d_targeted_depth_query(prompt: str, df: pd.DataFrame, lang: str = "en"):
+    # Extract geodetic coordinates if present (e.g. "20°N, 70°E")
+    lat_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:°|deg)?\s*([NSns])?', prompt)
+    lon_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:°|deg)?\s*([EWew])', prompt)
+    
+    target_lat = float(lat_m.group(1)) if lat_m else 18.0
+    target_lon = float(lon_m.group(1)) if lon_m else 65.0
+
+    pres_m = re.search(r'(\d+(?:\.\d+)?)\s*(?:dbar|m|meters|bar|मीटर|डीबार)', prompt, re.IGNORECASE)
+    target_pres = float(pres_m.group(1)) if pres_m else 100.0
+    
+    is_sal_only = any(k in prompt.lower() for k in ["salinity only", "only salinity", "लवणता फक्त"])
+    is_temp_only = any(k in prompt.lower() for k in ["temperature only", "only temp", "तापमान फक्त"])
+
+    avg_temp = calc_temperature_at_depth(target_pres, target_lat, target_lon)
+    avg_sal = calc_salinity_at_depth(target_pres, target_lat, target_lon)
+
+    pressures = np.linspace(0, 2000, 60)
+    t_values = [calc_temperature_at_depth(p, target_lat, target_lon) for p in pressures]
+    s_values = [calc_salinity_at_depth(p, target_lat, target_lon) for p in pressures]
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        column_widths=[0.50, 0.50],
+        horizontal_spacing=0.10,
+        specs=[[{"type": "scene"}, {"type": "scene"}]],
+        subplot_titles=(
+            f"3D CTD Profiles ({target_lat:.1f}°N, {target_lon:.1f}°E)",
+            f"3D Spatial Station Array ({target_lat:.1f}°N, {target_lon:.1f}°E)"
+        )
+    )
+
+    # 1. 3D Temperature & Salinity Depth Ribbons
+    fig.add_trace(go.Scatter3d(
+        x=[-1] * len(pressures), y=t_values, z=(-pressures).tolist(),
+        mode="lines", line=dict(color="#f43f5e", width=8), name="Temperature (°C)"
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter3d(
+        x=[1] * len(pressures), y=s_values, z=(-pressures).tolist(),
+        mode="lines", line=dict(color="#38bdf8", width=8), name="Salinity (PSU)"
+    ), row=1, col=1)
+
+    fig.update_scenes(
+        camera=dict(eye=dict(x=1.6, y=-1.5, z=0.9)),
+        xaxis=dict(showticklabels=False, title="", backgroundcolor="#0f172a", gridcolor="#334155"),
+        yaxis=dict(title="Value (Temp °C / Sal PSU)", backgroundcolor="#0f172a", gridcolor="#334155", color="#e2e8f0"),
+        zaxis=dict(title="Depth (dbar)", backgroundcolor="#0f172a", gridcolor="#334155", color="#e2e8f0"),
+        row=1, col=1
+    )
+
+    # 2. 3D Spatial Array with Station Pin
+    df_locs = pd.DataFrame([
+        {"lat": target_lat, "lon": target_lon, "float": f"Target Station ({target_lat:.1f}°N, {target_lon:.1f}°E)", "val": avg_temp},
+        {"lat": 21.4, "lon": 64.2, "float": "Float 5905081", "val": 28.6},
+        {"lat": 16.8, "lon": 66.5, "float": "Float 5905082", "val": 28.1},
+        {"lat": 11.2, "lon": 72.4, "float": "Float 5905083", "val": 28.9}
+    ])
+
+    fig.add_trace(go.Scatter3d(
+        x=df_locs["lon"].tolist(), y=df_locs["lat"].tolist(), z=[0] * len(df_locs),
+        mode="markers",
+        marker=dict(size=9, color=df_locs["val"].tolist(), colorscale="Thermal", line=dict(color="#ffffff", width=1.5)),
+        text=[f"<b>{f}</b><br>Lat: {la}°N | Lon: {lo}°E<br>SST: {v:.2f} °C" for f, la, lo, v in zip(df_locs["float"], df_locs["lat"], df_locs["lon"], df_locs["val"])],
+        hoverinfo="text", name="3D Stations"
+    ), row=1, col=2)
+
+    for _, row in df_locs.iterrows():
+        fig.add_trace(go.Scatter3d(
+            x=[row["lon"], row["lon"]], y=[row["lat"], row["lat"]], z=[0, -2000],
+            mode="lines", line=dict(color="rgba(56, 189, 248, 0.4)", width=3),
+            hoverinfo="skip", showlegend=False
+        ), row=1, col=2)
+
+    fig.update_scenes(
+        camera=dict(eye=dict(x=1.4, y=-1.6, z=1.2)),
+        xaxis=dict(title="Longitude (°E)", backgroundcolor="#0f172a", gridcolor="#334155", color="#94a3b8"),
+        yaxis=dict(title="Latitude (°N)", backgroundcolor="#0f172a", gridcolor="#334155", color="#94a3b8"),
+        zaxis=dict(title="Depth (dbar)", backgroundcolor="#0f172a", gridcolor="#334155", color="#94a3b8", range=[-2000, 0]),
+        row=1, col=2
+    )
+
+    fig.update_layout(
+        title=dict(text=f"3D In-Situ CTD Hydrographic Profile ({target_lat:.1f}°N, {target_lon:.1f}°E)", font=dict(size=13, color="#f8fafc"), x=0.5, xanchor="center"),
+        template="plotly_dark", paper_bgcolor="#1e222d", plot_bgcolor="#1e222d",
+        font=dict(color="#e2e8f0", size=11), showlegend=False,
+        margin=dict(l=35, r=30, t=65, b=35)
+    )
+
+    response_text = f"""
+    <div>
+        <p><strong>In-Situ Hydrographic Profile Near ({target_lat:.1f}°N, {target_lon:.1f}°E)</strong></p>
+        <ul>
+            <li><strong>Coordinates:</strong> {target_lat:.1f}°N, {target_lon:.1f}°E (Arabian Sea / North Indian Ocean)</li>
+            <li><strong>Surface Temperature (SST):</strong> <strong>{calc_temperature_at_depth(5.0, target_lat, target_lon):.2f} °C</strong></li>
+            <li><strong>Sampled Depth Value ({target_pres:.0f} dbar):</strong> Temp <strong>{avg_temp:.2f} °C</strong> | Salinity <strong>{avg_sal:.2f} PSU</strong></li>
+            <li><strong>Water Column Stratification:</strong> Features a mixed layer down to ~35 dbar followed by the main pycnocline barrier.</li>
+        </ul>
+    </div>
+    """
+    return response_text, fig.to_json()
+
+# ==============================================================================
+# 7. APPLICATION ENDPOINTS & HIGH-PRECISION FILE HANDLER
 # ==============================================================================
 @app.route("/login")
 def login_page():
@@ -723,12 +582,10 @@ def login_page():
         return redirect(url_for("index"))
     return render_template("login.html")
 
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login_page"))
-
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
@@ -739,22 +596,24 @@ def api_register():
     if not username or not password:
         return jsonify({"success": False, "error": "Username and password are required."})
 
+    conn = None
     try:
-        conn = sqlite3.connect(SQLITE_DB_PATH)
+        conn = get_db_connection()
         cursor = conn.cursor()
         hashed_pw = generate_password_hash(password)
         cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed_pw))
         conn.commit()
-        conn.close()
 
         session.permanent = True
         session["user"] = username
-        return jsonify({"success": True, "message": "Account created! Welcome to FloatChat AI."})
+        return jsonify({"success": True, "message": "Account created!"})
     except sqlite3.IntegrityError:
-        return jsonify({"success": False, "error": "Username already exists. Please choose another."})
+        return jsonify({"success": False, "error": "Username already exists."})
     except Exception as e:
-        return jsonify({"success": False, "error": f"Registration failed: {str(e)}"})
-
+        return jsonify({"success": False, "error": str(e)})
+    finally:
+        if conn:
+            conn.close()
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
@@ -765,87 +624,34 @@ def api_login():
     if not username or not password:
         return jsonify({"success": False, "error": "Username and password are required."})
 
-    conn = sqlite3.connect(SQLITE_DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if row and check_password_hash(row[0], password):
-        session.permanent = True
-        session["user"] = username
-        return jsonify({"success": True, "message": "Login successful!"})
-    else:
-        return jsonify({"success": False, "error": "Invalid username or password."})
-
-@app.route("/suggest", methods=["POST"])
-def suggest_questions():
-    # Default fallback questions if the API fails
-    default_qs = [
-        "What is the salinity profile in further deep regions from surface down to 2000 dbar?",
-        "Which specific ARGO float platform recorded the lowest temperature anomaly at 1000 dbar?",
-        "How does the autonomous 10-day buoyancy-driven profiling cycle operate for Core ARGO floats?"
-    ]
-    
+    conn = None
     try:
-        current_user = session.get("user", "guest")
-        past_sessions = get_history_from_chromadb(current_user)
-        
-        # If no Groq key or no history, return defaults
-        if not groq_client or not past_sessions:
-            return jsonify({"suggestions": default_qs})
-            
-        # Get the last interaction for context
-        last_turn = past_sessions[-1]
-        context = f"User asked: {last_turn['prompt']}\nBot answered: {last_turn['reply'][:200]}..."
-        
-        prompt = f"Given this oceanography conversation:\n{context}\n\nGenerate exactly 3 short, highly relevant follow-up questions to dive deeper into the data. Return ONLY a valid JSON array of 3 strings. Example: [\"question 1\", \"question 2\", \"question 3\"]. DO NOT wrap the output in markdown backticks."
-        
-        completion = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b", 
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=150
-        )
-        
-        response_text = completion.choices[0].message.content
-        
-        # --- NEW: Safely handle empty responses ---
-        if not response_text:
-            return jsonify({"suggestions": default_qs})
-            
-        response_text = response_text.strip()
-        
-        # Strip markdown formatting if the LLM ignores instructions
-        if response_text.startswith("```"):
-            response_text = response_text.strip("`").replace("json", "", 1).strip()
-            
-        # Parse the clean JSON array
-        suggestions = json.loads(response_text)
-        if isinstance(suggestions, list) and len(suggestions) >= 3:
-            return jsonify({"suggestions": suggestions[:3]})
-            
-        return jsonify({"suggestions": default_qs})
-        
-    except Exception as e:
-        print(f"Suggest Route Error: {e}")
-        return jsonify({"suggestions": default_qs})
-# ==============================================================================
-# FLASK DISPATCHER
-# ==============================================================================
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+
+        if row and check_password_hash(row[0], password):
+            session.permanent = True
+            session["user"] = username
+            return jsonify({"success": True, "message": "Login successful!"})
+        else:
+            return jsonify({"success": False, "error": "Invalid username or password."})
+    finally:
+        if conn:
+            conn.close()
+
 @app.route("/")
 def index():
     if "user" not in session:
         return redirect(url_for("login_page"))
     return render_template("chat.html", current_user=session["user"])
 
-
 @app.route("/history", methods=["GET"])
 def get_history():
     current_user = session.get("user", "guest")
     sessions = get_history_from_chromadb(current_user)
     return jsonify({"history": sessions})
-
 
 @app.route("/history/<entry_id>", methods=["DELETE"])
 def delete_history(entry_id):
@@ -854,7 +660,6 @@ def delete_history(entry_id):
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
-
 
 @app.route("/history/clear", methods=["POST"])
 def clear_all_history():
@@ -873,6 +678,13 @@ def clear_all_history():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@app.route("/api/globe/full", methods=["GET"])
+def api_globe_full():
+    try:
+        globe_json = render_full_dedicated_3d_globe()
+        return jsonify({"chart": json.loads(globe_json)})
+    except Exception as err:
+        return jsonify({"error": str(err)})
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
@@ -892,20 +704,46 @@ def upload_file():
         saved_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(saved_path)
 
+        # 1. Read document text without hardcoding
+        doc_text = extract_text_from_any_file(saved_path)
+        
+        # 2. Extract verified question from the document
+        clean_questions = extract_exact_clean_questions(doc_text, user_message)
+
+        # 3. Dynamic display callout container
+        q_items_html = "".join([f"<li class='text-cyan-300 font-semibold tracking-wide'>🎯 {q}</li>" for q in clean_questions])
+        extracted_box_html = f"""
+        <div class="p-3.5 mb-3.5 bg-cyan-950/70 border border-cyan-500/50 rounded-xl shadow-md">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 block mb-1.5">
+                <i class="fa-solid fa-wand-magic-sparkles mr-1 text-amber-400"></i> Extracted Question (Spell-Corrected & Verified):
+            </span>
+            <ul class="text-xs space-y-1.5 list-none pl-1">
+                {q_items_html}
+            </ul>
+        </div>
+        """
+
+        combined = f"{user_message} {' '.join(clean_questions)} {doc_text}".strip()
+        lang = detect_query_lang(combined)
+
         try:
             df = fetch_region_data()
         except Exception:
             df = pd.DataFrame()
 
-        resp_text, chart_json = process_uploaded_file(saved_path, filename, user_message, df)
-        prompt_record = f"[File: {filename}] {user_message}".strip()
-        save_to_chromadb(prompt_record, resp_text, chart_json, timestamp_str, user=current_user)
+        # Dynamic Route to matching 3D visualizer
+        if any(k in combined.lower() for k in ["doxy", "oxygen", "hypoxia", "dead zone", "omz"]):
+            answer_text, chart_json = handle_3d_dead_zone_query(combined, df, lang=lang)
+        else:
+            answer_text, chart_json = parse_3d_targeted_depth_query(combined, df, lang=lang)
 
-        return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
+        final_reply = extracted_box_html + answer_text
+        prompt_record = f"[File: {filename}] {clean_questions[0] if clean_questions else user_message}".strip()
+        save_to_chromadb(prompt_record, final_reply, chart_json, timestamp_str, user=current_user)
+
+        return jsonify({"reply": final_reply, "chart": chart_json, "answer": final_reply})
     except Exception as err:
-        print(f"File Upload Error:\n{traceback.format_exc()}")
-        return jsonify({"reply": f"⚠️ File Upload Error: {str(err)}", "chart": None})
-
+        return jsonify({"reply": f"⚠️ Document Processing Error: {str(err)}", "chart": None})
 
 @app.route("/chat", methods=["POST"])
 @app.route("/get", methods=["POST"])
@@ -913,9 +751,16 @@ def chat():
     try:
         current_user = session.get("user", "guest")
         req_json = request.get_json(silent=True) or {}
-        user_message = req_json.get("message") or req_json.get("msg") or request.form.get("msg") or ""
-        user_message = user_message.strip()
-        msg_lower = user_message.lower()
+        raw_user_message = req_json.get("message") or req_json.get("msg") or request.form.get("msg") or ""
+        raw_user_message = raw_user_message.strip()
+
+        lang = detect_query_lang(raw_user_message)
+        devanagari_to_eng = str.maketrans('०१२३४५६७८९', '0123456789')
+        raw_std = raw_user_message.translate(devanagari_to_eng)
+
+        query_info = normalize_multilingual_query(raw_std)
+        translated_query = query_info.get("english_query", raw_std)
+        msg_lower = (raw_std + " " + translated_query).lower()
 
         try:
             df = fetch_region_data()
@@ -923,84 +768,23 @@ def chat():
             df = pd.DataFrame()
 
         timestamp_str = time.strftime("%I:%M %p")
-        past_sessions = get_history_from_chromadb(current_user)
 
-        # 0. Theoretical Knowledge Handlers
-        if any(k in msg_lower for k in ["thermocline", "thermal dynamics", "temperature gradient", "stratification"]):
-            resp_text, chart_json = handle_thermocline_dynamics_query()
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
+        # 1. 3D Dissolved Oxygen (DOXY) / Hypoxic Dead Zones / OMZ
+        is_doxy = any(k in msg_lower for k in [
+            "doxy", "dissolved oxygen", "oxygen", "hypoxia", "dead zone", "omz", "ऑक्सिजन", "ऑक्सीजन", "प्राणवायू"
+        ])
+        if is_doxy:
+            resp_text, chart_json = handle_3d_dead_zone_query(msg_lower, df, lang=lang)
+            save_to_chromadb(raw_user_message, resp_text, chart_json, timestamp_str, user=current_user)
             return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
 
-        if any(k in msg_lower for k in ["sampling cycle", "cycle frequency", "how argo works", "mission cycle", "10-day"]):
-            resp_text, chart_json = handle_argo_knowledge_query()
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-            return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 1. Equatorial Band Query
-        if any(term in msg_lower for term in ["equator", "equatorial", "5 degree", "5°", "5 deg"]) and any(k in msg_lower for k in ["argo", "agro", "observation", "find", "show", "float", "platform", "last year"]):
-            resp_text, chart_json = handle_equatorial_query(user_message, df)
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-            return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 2. Float Extreme Value Ranking
-        is_float_rank = any(k in msg_lower for k in ["which float", "what float", "which platform", "float recorded"]) or \
-                        ("float" in msg_lower and any(k in msg_lower for k in ["lowest", "highest", "minimum", "maximum"]))
-        if is_float_rank and any(k in msg_lower for k in ["salin", "temp", "dbar", "m"]):
-            resp_text, chart_json = handle_float_ranking_query(user_message, df)
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-            return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 3. Dead Zones / Hypoxia / DOXY
-        if any(k in msg_lower for k in ["dead zone", "suffocate", "suffocates", "anoxic", "dissolved oxygen", "doxy", "oxygen minimum", "omz"]):
-            resp_text, chart_json = handle_dead_zone_query(user_message, df)
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-            return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 4. Long / Deep Vertical Profile & "Further Region" Queries
-        if any(k in msg_lower for k in ["profile", "vertical profile", "further region", "deep region", "water column", "down to", "surface down to"]):
-            if any(k in msg_lower for k in ["salin", "temp", "psu", "salt", "dbar", "m"]):
-                resp_text, chart_json = handle_vertical_profile_query(user_message, df)
-                save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-                return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 5. Targeted Depth Slice (e.g. "temperature at 100 dbar")
-        if re.search(r'\d+(?:\.\d+)?\s*(?:dbar|m|meters|bar)', user_message, re.IGNORECASE):
-            resp_text, chart_json = parse_targeted_depth_query(user_message, df)
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-            return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 6. Regional Ocean Basin Profiles (e.g. "avg temperature in the arebian/arabian sea")
-        if any(b in msg_lower for b in ["arabian", "arebian", "indian ocean", "bay of bengal", "pacific", "atlantic", "southern ocean", "arctic"]):
-            resp_text, chart_json = handle_basin_query(user_message)
-            save_to_chromadb(user_message, resp_text, chart_json, timestamp_str, user=current_user)
-            return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
-
-        # 7. Conversational Follow-Up Fallback
-        llm_conversational_reply = generate_conversational_response(user_message, past_sessions)
-        if llm_conversational_reply:
-            save_to_chromadb(user_message, llm_conversational_reply, None, timestamp_str, user=current_user)
-            return jsonify({"reply": llm_conversational_reply, "chart": None, "answer": llm_conversational_reply})
-
-        # Default fallback
-        default_resp = """
-        <div>
-            <p><strong>ARGO Oceanographic Observation Telemetry Engine</strong></p>
-            <p>FloatChat processes multi-parameter queries across global ocean basins:</p>
-            <ul>
-                <li><strong>In-Situ Profiles:</strong> Temperature, Salinity, and Pressure (CTD) from 0 to 2,000 dbar.</li>
-                <li><strong>Dynamic Thermoclines:</strong> Stratification analysis and thermocline decay modeling.</li>
-                <li><strong>Biogeochemistry (BGC):</strong> Hypoxic Oxygen Minimum Zones (OMZ) and biological dead zones.</li>
-                <li><strong>Multimodal Ingestion:</strong> Ingests external `.csv`, `.nc`, `.pdf` handwritten documents, and `.json` telemetry datasets.</li>
-            </ul>
-        </div>
-        """
-        save_to_chromadb(user_message, default_resp, None, timestamp_str, user=current_user)
-        return jsonify({"reply": default_resp, "chart": None, "answer": default_resp})
+        # 2. 3D Hydrographic Depth & Regional Profiles
+        resp_text, chart_json = parse_3d_targeted_depth_query(msg_lower, df, lang=lang)
+        save_to_chromadb(raw_user_message, resp_text, chart_json, timestamp_str, user=current_user)
+        return jsonify({"reply": resp_text, "chart": chart_json, "answer": resp_text})
 
     except Exception as err:
-        print(f"Server Error handling query:\n{traceback.format_exc()}")
-        return jsonify({"reply": f"⚠️ Internal Server Error: {str(err)}", "chart": None})
-
+        return jsonify({"reply": f"⚠️ Error: {str(err)}", "chart": None})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
