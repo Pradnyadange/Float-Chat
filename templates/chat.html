@@ -28,11 +28,26 @@
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .glass-panel-dark {
-            background: rgba(10, 30, 50, 0.58);
+        /* Unified Glass Panel adapting to Light/Dark Mode */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(14px);
             -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(30, 58, 138, 0.15);
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+
+        html.dark .glass-panel {
+            background: rgba(10, 30, 50, 0.58);
             border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        #ocean-overlay {
+            position: fixed;
+            inset: 0;
+            background: transparent; /* Keeps the fishes perfectly visible in both modes */
+            z-index: 1;
+            pointer-events: none;
         }
 
         .plot-container {
@@ -45,8 +60,12 @@
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #64748b;
+            background: #94a3b8;
             border-radius: 4px;
+        }
+        
+        html.dark ::-webkit-scrollbar-thumb {
+            background: #64748b;
         }
 
         .recording-pulse {
@@ -54,57 +73,45 @@
         }
 
         @keyframes pulse-red {
-            0% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-            }
-
-            70% {
-                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
-            }
-
-            100% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-            }
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
-<body class="text-slate-100 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200">
-    <video id="ocean-bg" autoplay muted loop playsinline>
+<body class="text-blue-900 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200">
+    <!-- Video background stays raw and un-tinted -->
+    <video id="ocean-bg" class="absolute inset-0 w-full h-full object-cover -z-10" autoplay muted loop playsinline>
         <source src="{{ url_for('static', filename='video/ocean.mp4') }}" type="video/mp4">
     </video>
 
     <div id="ocean-overlay"></div>
 
-    <!-- Left Sidebar: ChromaDB History & SQLite Relational Session -->
-    <aside id="sidebar-container"
-        class="w-72 glass-panel-dark border-r border-slate-800 flex flex-col h-full z-20 transition-colors duration-200">
+    <!-- Left Sidebar -->
+    <aside id="sidebar-container" class="w-72 glass-panel border-r border-blue-200 dark:border-slate-800 flex flex-col h-full z-20 transition-colors duration-200">
         <!-- Brand Header -->
-        <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div class="p-4 border-b border-blue-200 dark:border-slate-800 flex items-center justify-between">
             <div class="flex items-center space-x-2">
-                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold">
                     <i class="fa-solid fa-water"></i>
                 </div>
                 <div>
                     <h1 class="font-bold text-sm tracking-wide">FloatChat AI</h1>
-                    <p class="text-[10px] text-slate-400">ARGO In-Situ Discovery</p>
+                    <p class="text-[10px] text-blue-500 dark:text-slate-400">ARGO In-Situ Discovery</p>
                 </div>
             </div>
-            <button onclick="startNewChat()" title="New Chat Session"
-                class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs border border-slate-700 flex items-center gap-1 transition">
+            <button onclick="startNewChat()" title="New Chat Session" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-cyan-600 dark:text-cyan-400 text-xs border border-blue-200 dark:border-slate-700 flex items-center gap-1 transition">
                 <i class="fa-solid fa-plus"></i> New
             </button>
         </div>
 
         <!-- History Title and Counter -->
-        <div class="p-3 flex items-center justify-between border-b border-slate-800/50">
-            <span
-                class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1 flex items-center gap-1.5">
-                <i class="fa-solid fa-database text-cyan-400 text-[10px]"></i> ChromaDB History
+        <div class="p-3 flex items-center justify-between border-b border-blue-200/50 dark:border-slate-800/50">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-blue-600 dark:text-slate-400 px-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-database text-cyan-500 dark:text-cyan-400 text-[10px]"></i> ChromaDB History
             </span>
-            <span id="history-count"
-                class="text-[10px] bg-slate-800 text-cyan-300 px-2 py-0.5 rounded-full font-mono">0</span>
+            <span id="history-count" class="text-[10px] bg-blue-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 px-2 py-0.5 rounded-full font-mono">0</span>
         </div>
 
         <!-- ChromaDB History List -->
@@ -112,38 +119,31 @@
             <!-- Dynamically populated from ChromaDB -->
         </div>
 
-        <!-- Sidebar Footer: Relational SQLite Profile, Theme Switcher & Clear History -->
-        <div class="p-3 border-t border-slate-800 flex flex-col gap-2.5">
+        <!-- Sidebar Footer -->
+        <div class="p-3 border-t border-blue-200 dark:border-slate-800 flex flex-col gap-2.5">
             <div class="flex items-center justify-between text-xs">
-                <!-- Clear DB Sessions -->
-                <button onclick="clearAllHistory()"
-                    class="text-rose-400 hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
+                <button onclick="clearAllHistory()" class="text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition flex items-center gap-1.5 text-[11px]">
                     <i class="fa-regular fa-trash-can"></i> Clear History
                 </button>
 
                 <!-- Light / Dark Mode Toggle Button -->
-                <button id="theme-toggle" onclick="toggleTheme()"
-                    class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 dark:text-amber-300 text-xs border border-slate-700 flex items-center gap-1.5 transition"
-                    title="Toggle Theme">
+                <button id="theme-toggle" onclick="toggleTheme()" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-amber-500 dark:text-amber-300 text-xs border border-blue-200 dark:border-slate-700 flex items-center gap-1.5 transition" title="Toggle Theme">
                     <i id="theme-icon" class="fa-solid fa-sun"></i>
-                    <span id="theme-text" class="text-[10px] text-slate-300">Light</span>
+                    <span id="theme-text" class="text-[10px] text-blue-700 dark:text-slate-300">Light</span>
                 </button>
             </div>
 
             <!-- Relational DB User Session -->
-            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+            <div class="flex items-center justify-between pt-2 border-t border-blue-200/80 dark:border-slate-800/80 text-xs">
                 <div class="flex items-center gap-2 truncate">
-                    <div
-                        class="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs">
+                    <div class="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-xs">
                         <i class="fa-solid fa-user"></i>
                     </div>
-                    <span class="text-[11px] text-slate-300 font-medium truncate max-w-[120px]"
-                        title="Authenticated User">
+                    <span class="text-[11px] text-blue-800 dark:text-slate-300 font-medium truncate max-w-[120px]" title="Authenticated User">
                         {{ current_user or 'Operator' }}
                     </span>
                 </div>
-                <a href="/logout" title="Sign Out"
-                    class="text-slate-400 hover:text-rose-400 transition text-[11px] flex items-center gap-1">
+                <a href="/logout" title="Sign Out" class="text-blue-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition text-[11px] flex items-center gap-1">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
                 </a>
             </div>
@@ -151,71 +151,55 @@
     </aside>
 
     <!-- Main Workspace -->
-    <div id="workspace-container" class="flex-1 flex flex-col h-full overflow-hidden">
+    <div id="workspace-container" class="flex-1 flex flex-col h-full overflow-hidden z-10">
 
         <!-- Header -->
-        <header id="main-header"
-            class="glass-panel-dark px-6 py-3.5 flex items-center justify-between border-b border-slate-800 transition-colors duration-200">
+        <header id="main-header" class="glass-panel px-6 py-3.5 flex items-center justify-between border-b border-blue-200 dark:border-slate-800 transition-colors duration-200">
             <div>
-                <h2 class="font-semibold text-sm text-slate-100 flex items-center gap-2">
+                <h2 class="font-semibold text-sm flex items-center gap-2">
                     ARGO Multimodal Intelligence Workspace
-                    <span
-                        class="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">ChromaDB
-                        + SQLite</span>
+                    <span class="text-[10px] bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-2 py-0.5 rounded-full border border-cyan-500/30">ChromaDB + SQLite</span>
                 </h2>
-                <p class="text-xs text-slate-400">In-situ CTD Profiles, Hypoxic OMZ, Thermal Dynamics & Multi-Region
-                    Basins</p>
+                <p class="text-xs text-blue-600 dark:text-slate-400">In-situ CTD Profiles, Hypoxic OMZ, Thermal Dynamics & Multi-Region Basins</p>
             </div>
-            <div class="text-xs text-slate-400 flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <div class="text-xs text-blue-600 dark:text-slate-400 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
                 <span>Active Telemetry Online</span>
             </div>
         </header>
 
         <!-- Message Thread -->
         <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
-            <!-- Welcome Panel with Suggestions -->
             <div id="welcome-message" class="flex items-start space-x-3">
-                <div
-                    class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
+                <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
                     <i class="fa-solid fa-compass"></i>
                 </div>
-                <div id="welcome-card"
-                    class="glass-panel-dark p-5 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-2xl max-w-4xl shadow-lg space-y-3">
+                <div id="welcome-card" class="glass-panel p-5 text-sm border-l-4 border-cyan-500 rounded-2xl max-w-4xl shadow-lg space-y-3">
                     <div>
-                        <p class="font-semibold text-cyan-400 text-base">ARGO Ocean Discovery Workspace Ready</p>
-                        <p class="text-xs text-slate-300 mt-1">Interact using natural language, voice dictation, or raw
-                            data attachments (.csv, .json, .pdf handwritten scans).</p>
+                        <p class="font-semibold text-cyan-700 dark:text-cyan-400 text-base">ARGO Ocean Discovery Workspace Ready</p>
+                        <p class="text-xs text-blue-700 dark:text-slate-300 mt-1">Interact using natural language, voice dictation, or raw data attachments (.csv, .json, .pdf handwritten scans).</p>
                     </div>
 
                     <!-- Question Suggestions Section -->
-                    <div class="pt-2 border-t border-slate-800/80">
-                        <p
-                            class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
-                            <i class="fa-solid fa-lightbulb text-amber-400"></i> Suggested Inquiries:
+                    <div class="pt-2 border-t border-blue-200 dark:border-slate-800/80">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-blue-600 dark:text-slate-400 mb-2.5 flex items-center gap-1.5">
+                            <i class="fa-solid fa-lightbulb text-amber-500 dark:text-amber-400"></i> Suggested Inquiries:
                         </p>
                         <div class="flex flex-wrap gap-2">
-                            <button
-                                onclick="applySuggestion('What is the salinity and temperature profile in further deep regions from surface down to 2000 dbar?')"
-                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
-                                <i class="fa-solid fa-water text-[10px]"></i> Salinity profile in further regions
-                                (0–2000 dbar)
+                            <button onclick="applySuggestion('What is the salinity and temperature profile in further deep regions from surface down to 2000 dbar?')"
+                                class="text-xs bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-cyan-950/80 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-water text-[10px]"></i> Salinity profile in further regions (0–2000 dbar)
                             </button>
-                            <button
-                                onclick="applySuggestion('What is the average temperature in the Arabian Sea across the upper mixed layer and deep thermocline?')"
-                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
-                                <i class="fa-solid fa-layer-group text-[10px]"></i> Arabian Sea Mixed Layer vs Deep
-                                Thermocline
+                            <button onclick="applySuggestion('What is the average temperature in the Arabian Sea across the upper mixed layer and deep thermocline?')"
+                                class="text-xs bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-cyan-950/80 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-layer-group text-[10px]"></i> Arabian Sea Mixed Layer vs Deep Thermocline
                             </button>
-                            <button
-                                onclick="applySuggestion('Show all ARGO float observations within 5 degree latitude of the equator in the Indian Ocean basin')"
-                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
-                                <i class="fa-solid fa-location-crosshairs text-[10px]"></i> Equatorial float array (±5°
-                                latitudinal belt)
+                            <button onclick="applySuggestion('Show all ARGO float observations within 5 degree latitude of the equator in the Indian Ocean basin')"
+                                class="text-xs bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-cyan-950/80 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                                <i class="fa-solid fa-location-crosshairs text-[10px]"></i> Equatorial float array (±5° latitudinal belt)
                             </button>
-                            <button
-                                onclick="applySuggestion('Analyze hypoxic dead zones and dissolved oxygen minimum zones below 200 dbar in the northern basin')"
-                                class="text-xs bg-slate-800 hover:bg-cyan-950/80 text-cyan-300 hover:text-cyan-200 border border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
+                            <button onclick="applySuggestion('Analyze hypoxic dead zones and dissolved oxygen minimum zones below 200 dbar in the northern basin')"
+                                class="text-xs bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-cyan-950/80 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
                                 <i class="fa-solid fa-biohazard text-[10px]"></i> Oxygen Minimum Zones below 200 dbar
                             </button>
                         </div>
@@ -225,69 +209,44 @@
         </main>
 
         <!-- Staged File Preview Banner -->
-        <div id="file-preview-banner"
-            class="hidden px-6 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-cyan-400">
+        <div id="file-preview-banner" class="hidden px-6 py-2 bg-blue-50 dark:bg-slate-900 border-t border-blue-200 dark:border-slate-800 flex items-center justify-between text-xs text-cyan-600 dark:text-cyan-400">
             <div class="flex items-center gap-2">
                 <i class="fa-solid fa-file-lines"></i>
-                <span id="staged-file-name" class="font-medium text-slate-200"></span>
-                <span id="staged-file-size" class="text-[10px] text-slate-500"></span>
+                <span id="staged-file-name" class="font-medium text-blue-900 dark:text-slate-200"></span>
+                <span id="staged-file-size" class="text-[10px] text-blue-500 dark:text-slate-500"></span>
             </div>
-            <button onclick="removeStagedFile()" class="text-slate-400 hover:text-rose-400 transition">
+            <button onclick="removeStagedFile()" class="text-blue-500 dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition">
                 <i class="fa-solid fa-xmark"></i> Remove
             </button>
         </div>
 
         <!-- Suggestion Chips Bar -->
-        <div
-            class="px-6 py-2 border-t border-slate-800/60 bg-slate-950/80 flex items-center gap-2 overflow-x-auto text-xs">
-            <span class="text-[10px] uppercase font-bold text-slate-400 whitespace-nowrap"><i
-                    class="fa-solid fa-bolt text-cyan-400 mr-1"></i>Quick Queries:</span>
-            <button
-                onclick="applySuggestion('What is the salinity profile in further deep regions from surface down to 2000 dbar?')"
-                class="whitespace-nowrap px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
-                Salinity in Further Deep Regions (0–2000 dbar)
-            </button>
-            <button
-                onclick="applySuggestion('Which specific ARGO float platform recorded the lowest temperature anomaly at 1000 dbar?')"
-                class="whitespace-nowrap px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
-                Lowest Temp Platform Anomaly (1000 dbar)
-            </button>
-            <button
-                onclick="applySuggestion('How does the autonomous 10-day buoyancy-driven profiling cycle operate for Core ARGO floats?')"
-                class="whitespace-nowrap px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]">
-                10-Day Autonomous Buoyancy Mission
-            </button>
+        <div class="px-6 py-2 border-t border-blue-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-950/80 flex items-center gap-2 overflow-x-auto text-xs">
+            <span class="text-[10px] uppercase font-bold text-blue-600 dark:text-slate-400 whitespace-nowrap">
+                <i class="fa-solid fa-bolt text-cyan-600 dark:text-cyan-400 mr-1"></i>Quick Queries:
+            </span>
+            <div id="dynamic-suggestions" class="flex items-center gap-2">
+                <!-- The JS will inject the dynamic buttons here -->
+                <span class="text-[11px] text-blue-400 dark:text-slate-500 italic">Waiting for context...</span>
+            </div>
         </div>
 
         <!-- Input Bar with Voice, File Attachment, and Execution -->
-        <footer id="main-footer" class="p-4 glass-panel-dark border-t border-slate-800 transition-colors duration-200">
+        <footer id="main-footer" class="p-4 glass-panel border-t border-blue-200 dark:border-slate-800 transition-colors duration-200">
             <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-2">
-                <!-- Hidden File Input -->
-                <input type="file" id="file-input" class="hidden" accept=".csv,.txt,.json,.nc,.dat,.pdf,.png,.jpg,.jpeg"
-                    onchange="handleFileSelected(event)" />
-
-                <!-- Attachment Button -->
-                <button type="button" onclick="document.getElementById('file-input').click()"
-                    title="Attach Ocean Dataset or Handwritten Scan (.pdf, .png, .jpg, .csv, .json)"
-                    class="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 rounded-xl border border-slate-700 transition">
+                <input type="file" id="file-input" class="hidden" accept=".csv,.txt,.json,.nc,.dat,.pdf,.png,.jpg,.jpeg" onchange="handleFileSelected(event)" />
+                <button type="button" onclick="document.getElementById('file-input').click()" title="Attach Ocean Dataset or Handwritten Scan"
+                    class="p-3 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-slate-800 text-blue-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 rounded-xl border border-blue-200 dark:border-slate-700 transition">
                     <i class="fa-solid fa-paperclip text-sm"></i>
                 </button>
-
-                <!-- Voice Dictation Button -->
                 <button type="button" id="mic-btn" onclick="toggleVoiceRecording()" title="Voice Input (Click to speak)"
-                    class="p-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 rounded-xl border border-slate-700 transition">
+                    class="p-3 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-slate-800 text-blue-600 dark:text-slate-300 hover:text-emerald-500 dark:hover:text-emerald-400 rounded-xl border border-blue-200 dark:border-slate-700 transition">
                     <i id="mic-icon" class="fa-solid fa-microphone text-sm"></i>
                 </button>
-
-                <!-- Text Query Field -->
-                <input id="user-input" type="text"
-                    placeholder="Ask or speak an ocean query (e.g. 'What is the salinity profile in further deep regions from surface down to 2000 dbar?')"
-                    class="flex-1 bg-slate-900/90 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+                <input id="user-input" type="text" placeholder="Ask or speak an ocean query (e.g. 'What is the salinity profile...')"
+                    class="flex-1 bg-white dark:bg-slate-900/90 text-blue-900 dark:text-slate-100 placeholder-blue-400 dark:placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-blue-200 dark:border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition shadow-inner"
                     autocomplete="off" />
-
-                <!-- Send Button -->
-                <button type="submit" id="send-btn"
-                    class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
+                <button type="submit" id="send-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
                     <span>Execute</span>
                     <i class="fa-solid fa-paper-plane"></i>
                 </button>
@@ -297,8 +256,8 @@
 
     <!-- Script Logic -->
     <script>
+        // Background Video Integrity
         const video = document.getElementById("ocean-bg");
-
         if (video) {
             video.muted = true;
             video.volume = 0;
@@ -327,19 +286,15 @@
         let isRecording = false;
         let recognition = null;
 
-        // Theme Controller
+        // --- THEME CONTROLLER ---
         function applySavedTheme() {
             const savedTheme = localStorage.getItem('floatchat_theme') || 'dark';
             if (savedTheme === 'light') {
                 document.documentElement.classList.remove('dark');
-                document.body.classList.remove('bg-slate-950', 'text-slate-100');
-                document.body.classList.add('bg-slate-100', 'text-slate-800');
-                themeIcon.className = "fa-solid fa-moon text-indigo-400";
+                themeIcon.className = "fa-solid fa-moon text-blue-600";
                 themeText.textContent = "Dark";
             } else {
                 document.documentElement.classList.add('dark');
-                document.body.classList.remove('bg-slate-100', 'text-slate-800');
-                document.body.classList.add('bg-slate-950', 'text-slate-100');
                 themeIcon.className = "fa-solid fa-sun text-amber-300";
                 themeText.textContent = "Light";
             }
@@ -351,14 +306,17 @@
             applySavedTheme();
         }
 
-        // Suggestions Handler
+        // --- UI UTILITIES ---
         function applySuggestion(text) {
             userInput.value = text;
             userInput.focus();
             chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
         }
 
-        // Voice Input Setup
+        function startNewChat() { location.reload(); }
+        function scrollToBottom() { chatBox.scrollTop = chatBox.scrollHeight; }
+
+        // --- VOICE RECOGNITION ---
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -368,8 +326,8 @@
 
             recognition.onstart = function () {
                 isRecording = true;
-                micBtn.classList.add('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
-                micIcon.className = "fa-solid fa-microphone-lines text-rose-400";
+                micBtn.classList.add('bg-rose-100', 'dark:bg-rose-900/60', 'border-rose-500', 'recording-pulse');
+                micIcon.className = "fa-solid fa-microphone-lines text-rose-500 dark:text-rose-400";
                 userInput.placeholder = "Listening to oceanographic inquiry...";
             };
 
@@ -406,12 +364,12 @@
 
         function stopVoiceRecording() {
             isRecording = false;
-            micBtn.classList.remove('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
-            micIcon.className = "fa-solid fa-microphone text-slate-300";
-            userInput.placeholder = "Ask or speak an ocean query (e.g. 'What is the average temperature in the Arabian Sea?')";
+            micBtn.classList.remove('bg-rose-100', 'dark:bg-rose-900/60', 'border-rose-500', 'recording-pulse');
+            micIcon.className = "fa-solid fa-microphone text-blue-600 dark:text-slate-300";
+            userInput.placeholder = "Ask or speak an ocean query (e.g. 'What is the average temperature...')";
         }
 
-        // File Selection Handlers
+        // --- FILE ATTACHMENTS ---
         function handleFileSelected(e) {
             const file = e.target.files[0];
             if (file) {
@@ -429,7 +387,7 @@
             fileBanner.classList.add('hidden');
         }
 
-        // ChromaDB Operations
+        // --- CHROMADB INTEGRATION ---
         async function loadHistoryFromDB() {
             try {
                 const res = await fetch('/history');
@@ -440,9 +398,7 @@
                 const data = await res.json();
                 dbHistory = data.history || [];
                 renderHistorySidebar();
-            } catch (e) {
-                console.error("Failed to load ChromaDB history:", e);
-            }
+            } catch (e) { console.error("Failed to load ChromaDB history:", e); }
         }
 
         function renderHistorySidebar() {
@@ -450,20 +406,20 @@
             historyCount.textContent = dbHistory.length;
 
             if (dbHistory.length === 0) {
-                historyList.innerHTML = '<div class="p-3 text-slate-500 text-center text-[11px]">No saved ChromaDB sessions found.</div>';
+                historyList.innerHTML = '<div class="p-3 text-blue-500 dark:text-slate-500 text-center text-[11px]">No saved ChromaDB sessions found.</div>';
                 return;
             }
 
             dbHistory.slice().reverse().forEach((item, idx) => {
                 const actualIdx = dbHistory.length - 1 - idx;
                 const el = document.createElement('div');
-                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-800/80 cursor-pointer transition text-slate-300 border border-transparent hover:border-slate-700/60";
+                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-800/80 cursor-pointer transition border border-transparent hover:border-blue-200 dark:hover:border-slate-700/60";
                 el.innerHTML = `
                     <div class="flex items-center gap-2 flex-1 min-w-0 pr-2" onclick="displaySavedSession(${actualIdx})">
-                        <i class="fa-regular fa-message text-cyan-400 text-xs"></i>
-                        <span class="truncate font-medium">${item.prompt}</span>
+                        <i class="fa-regular fa-message text-cyan-600 dark:text-cyan-400 text-xs"></i>
+                        <span class="truncate font-medium text-blue-800 dark:text-slate-300">${item.prompt}</span>
                     </div>
-                    <button onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition">
+                    <button onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-blue-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 p-1 transition">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 `;
@@ -483,9 +439,7 @@
             try {
                 await fetch(`/history/${entryId}`, { method: 'DELETE' });
                 await loadHistoryFromDB();
-            } catch (e) {
-                console.error("Delete error:", e);
-            }
+            } catch (e) { console.error("Delete error:", e); }
         }
 
         async function clearAllHistory() {
@@ -495,11 +449,10 @@
                 dbHistory = [];
                 renderHistorySidebar();
                 startNewChat();
-            } catch (e) {
-                console.error("Clear error:", e);
-            }
+            } catch (e) { console.error("Clear error:", e); }
         }
 
+        // --- MESSAGE RENDERING ---
         function appendUserMessage(text, timestamp, attachedFileName = null) {
             const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const fileBadge = attachedFileName ? `
@@ -528,21 +481,21 @@
 
             let contentHtml = `
                 <div class="flex items-start space-x-3">
-                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
+                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
                         <i class="fa-solid fa-water"></i>
                     </div>
-                    <div class="glass-panel-dark p-4 text-sm text-slate-200 border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md">
-                        <div class="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
-                        <span class="block text-left text-[10px] text-slate-400 mt-2">${time}</span>
+                    <div class="glass-panel p-4 text-sm border-l-4 border-cyan-500 rounded-xl w-full max-w-5xl shadow-md">
+                        <div class="text-blue-900 dark:text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
+                        <span class="block text-left text-[10px] text-blue-500 dark:text-slate-400 mt-2">${time}</span>
                         ${chartJson ? `
-                            <div class="mt-4 pt-3 border-t border-slate-700/60">
+                            <div class="mt-4 pt-3 border-t border-blue-200 dark:border-slate-700/60">
                                 <div class="flex items-center justify-between mb-2">
-                                    <span class="text-xs text-slate-400 font-medium"><i class="fa-solid fa-chart-line text-cyan-400 mr-1"></i> Rendered Telemetry Plot</span>
+                                    <span class="text-xs text-blue-600 dark:text-slate-400 font-medium"><i class="fa-solid fa-chart-line text-cyan-600 dark:text-cyan-400 mr-1"></i> Rendered Telemetry Plot</span>
                                     <div class="flex gap-2">
-                                        <button onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                        <button onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-cyan-600 dark:text-cyan-400 px-2.5 py-1 rounded border border-blue-200 dark:border-slate-600 flex items-center gap-1 transition">
                                             <i class="fa-solid fa-download"></i> PNG
                                         </button>
-                                        <button onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-slate-800 hover:bg-slate-700 text-purple-400 px-2.5 py-1 rounded border border-slate-600 flex items-center gap-1 transition">
+                                        <button onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-purple-600 dark:text-purple-400 px-2.5 py-1 rounded border border-blue-200 dark:border-slate-600 flex items-center gap-1 transition">
                                             <i class="fa-solid fa-file-code"></i> SVG
                                         </button>
                                     </div>
@@ -553,25 +506,17 @@
                     </div>
                 </div>
             `;
-
             chatBox.insertAdjacentHTML('beforeend', contentHtml);
 
             if (chartJson) {
                 setTimeout(() => {
                     try {
                         const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
-                        const config = {
-                            responsive: true,
-                            displayModeBar: true,
-                            displaylogo: false,
-                            modeBarButtonsToRemove: ['lasso2d', 'select2d']
-                        };
+                        const config = { responsive: true, displayModeBar: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d'] };
                         Plotly.newPlot(chartId, plotData.data, plotData.layout, config).then(() => {
                             Plotly.Plots.resize(document.getElementById(chartId));
                         });
-                    } catch (e) {
-                        console.error("Plotly render error:", e);
-                    }
+                    } catch (e) { console.error("Plotly render error:", e); }
                 }, 50);
             }
             scrollToBottom();
@@ -583,16 +528,32 @@
                 Plotly.downloadImage(chartDiv, { format: format, width: 1200, height: 800, filename: 'floatchat_' + format.toUpperCase() });
             }
         }
-
-        function startNewChat() {
-            location.reload();
+        // --- DYNAMIC SUGGESTIONS ---
+        async function fetchDynamicSuggestions() {
+            const suggestionsBox = document.getElementById('dynamic-suggestions');
+            
+            try {
+                // Call your /suggest backend route
+                const res = await fetch('/suggest', { method: 'POST' });
+                const data = await res.json();
+                
+                if (data.suggestions && data.suggestions.length > 0) {
+                    suggestionsBox.innerHTML = ''; // Clear the old buttons
+                    
+                    data.suggestions.forEach(suggestion => {
+                        const btn = document.createElement('button');
+                        btn.onclick = () => applySuggestion(suggestion);
+                        // Using the proper light/dark mode responsive classes!
+                        btn.className = "whitespace-nowrap px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-slate-300 rounded-lg border border-blue-200 dark:border-slate-700 transition text-[11px]";
+                        btn.textContent = suggestion;
+                        suggestionsBox.appendChild(btn);
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to load suggestions:", err);
+            }
         }
-
-        function scrollToBottom() {
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
-        // Form Submit Handler
+        // --- SUBMIT HANDLING ---
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = userInput.value.trim();
@@ -609,7 +570,7 @@
 
             const loadingId = 'loading-' + Date.now();
             chatBox.insertAdjacentHTML('beforeend', `
-                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-400 text-xs py-2">
+                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-600 dark:text-cyan-400 text-xs py-2">
                     <i class="fa-solid fa-spinner fa-spin text-sm"></i>
                     <span>Analyzing oceanographic telemetry & physical dynamics...</span>
                 </div>
@@ -622,11 +583,7 @@
                     const formData = new FormData();
                     formData.append('message', message);
                     formData.append('file', currentFile);
-
-                    response = await fetch('/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
+                    response = await fetch('/upload', { method: 'POST', body: formData });
                 } else {
                     response = await fetch('/chat', {
                         method: 'POST',
@@ -645,6 +602,9 @@
 
                 appendBotMessage(data.reply || data.answer, data.chart, timeStr);
                 await loadHistoryFromDB();
+                
+                // Fetch new context-aware suggestions after bot replies!
+                fetchDynamicSuggestions(); 
             } catch (err) {
                 document.getElementById(loadingId)?.remove();
                 appendBotMessage("⚠️ Error: Multimodal pipeline failed to process request.", null);
@@ -653,12 +613,11 @@
             }
         });
 
-        // Initialize on load
+        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             applySavedTheme();
             loadHistoryFromDB();
         });
     </script>
 </body>
-
 </html>

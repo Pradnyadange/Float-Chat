@@ -703,7 +703,7 @@ def generate_conversational_response(user_query: str, chat_history_list: list) -
 
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=messages,
             temperature=0.2,
             max_tokens=350
@@ -778,7 +778,58 @@ def api_login():
     else:
         return jsonify({"success": False, "error": "Invalid username or password."})
 
-
+@app.route("/suggest", methods=["POST"])
+def suggest_questions():
+    # Default fallback questions if the API fails
+    default_qs = [
+        "What is the salinity profile in further deep regions from surface down to 2000 dbar?",
+        "Which specific ARGO float platform recorded the lowest temperature anomaly at 1000 dbar?",
+        "How does the autonomous 10-day buoyancy-driven profiling cycle operate for Core ARGO floats?"
+    ]
+    
+    try:
+        current_user = session.get("user", "guest")
+        past_sessions = get_history_from_chromadb(current_user)
+        
+        # If no Groq key or no history, return defaults
+        if not groq_client or not past_sessions:
+            return jsonify({"suggestions": default_qs})
+            
+        # Get the last interaction for context
+        last_turn = past_sessions[-1]
+        context = f"User asked: {last_turn['prompt']}\nBot answered: {last_turn['reply'][:200]}..."
+        
+        prompt = f"Given this oceanography conversation:\n{context}\n\nGenerate exactly 3 short, highly relevant follow-up questions to dive deeper into the data. Return ONLY a valid JSON array of 3 strings. Example: [\"question 1\", \"question 2\", \"question 3\"]. DO NOT wrap the output in markdown backticks."
+        
+        completion = groq_client.chat.completions.create(
+            model="openai/gpt-oss-120b", 
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=150
+        )
+        
+        response_text = completion.choices[0].message.content
+        
+        # --- NEW: Safely handle empty responses ---
+        if not response_text:
+            return jsonify({"suggestions": default_qs})
+            
+        response_text = response_text.strip()
+        
+        # Strip markdown formatting if the LLM ignores instructions
+        if response_text.startswith("```"):
+            response_text = response_text.strip("`").replace("json", "", 1).strip()
+            
+        # Parse the clean JSON array
+        suggestions = json.loads(response_text)
+        if isinstance(suggestions, list) and len(suggestions) >= 3:
+            return jsonify({"suggestions": suggestions[:3]})
+            
+        return jsonify({"suggestions": default_qs})
+        
+    except Exception as e:
+        print(f"Suggest Route Error: {e}")
+        return jsonify({"suggestions": default_qs})
 # ==============================================================================
 # FLASK DISPATCHER
 # ==============================================================================
