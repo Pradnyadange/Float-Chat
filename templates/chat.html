@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FloatChat AI - ARGO Multi-Modal Discovery Platform</title>
-    <!-- Tailwind CSS -->
+    <title>FloatChat AI - Autonomous ARGO Hydrographic Discovery</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -13,890 +13,951 @@
             theme: {
                 extend: {
                     colors: {
-                        brand: {
-                            500: '#06b6d4',
-                            600: '#0891b2',
-                            900: '#164e63',
+                        ocean: {
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49',
                         }
                     }
                 }
             }
         }
     </script>
-    <!-- Anti-flicker Theme Initializer -->
-    <script>
-            (function () {
-                const savedTheme = localStorage.getItem('floatchat_theme');
-                if (savedTheme === 'light') {
-                    document.documentElement.classList.remove('dark');
-                } else {
-                    document.documentElement.classList.add('dark');
-                }
-            })();
-    </script>
-    <!-- Plotly.js -->
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
-        #bg-video {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            min-width: 100%;
-            min-height: 100%;
-            width: auto;
-            height: auto;
-            z-index: 0;
-            transform: translate(-50%, -50%);
-            object-fit: cover;
-            pointer-events: none;
-        }
-
-        /* Responsive Video Overlays for Dark vs Light Mode */
-        .video-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 1;
-            pointer-events: none;
-            transition: background-color 0.3s ease;
-        }
-
-        html.dark .video-overlay {
-            background: rgba(10, 15, 29, 0.65);
-            backdrop-filter: blur(2px);
-        }
-
-        html:not(.dark) .video-overlay {
-            background: rgba(241, 245, 249, 0.65);
-            backdrop-filter: blur(2px);
-        }
-
-        /* Adaptive Glass Panels */
-        .glass-panel {
-            backdrop-filter: blur(16px) !important;
-            -webkit-backdrop-filter: blur(16px) !important;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-
-        html.dark .glass-panel {
-            background: rgba(15, 23, 42, 0.78);
-            border-color: rgba(255, 255, 255, 0.08);
-            color: #f8fafc;
-        }
-
-        html:not(.dark) .glass-panel {
-            background: rgba(255, 255, 255, 0.85);
-            border-color: rgba(0, 0, 0, 0.1);
-            color: #0f172a;
-        }
-
-        .plot-container {
-            width: 100% !important;
-            min-height: 480px;
-        }
-
         ::-webkit-scrollbar {
             width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #64748b;
+            background: rgba(51, 65, 85, 0.5);
             border-radius: 4px;
         }
 
-        .recording-pulse {
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 0.8);
+        }
+
+        #bg-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .mic-recording {
             animation: pulse-red 1.5s infinite;
+            background-color: rgba(239, 68, 68, 0.3) !important;
+            border-color: rgba(239, 68, 68, 0.8) !important;
+            color: #ef4444 !important;
         }
 
         @keyframes pulse-red {
             0% {
+                transform: scale(1);
                 box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
             }
 
             70% {
-                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+                transform: scale(1.05);
+                box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
             }
 
             100% {
+                transform: scale(1);
                 box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
             }
         }
     </style>
 </head>
 
-<body
-    class="bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex h-screen overflow-hidden transition-colors duration-200 relative">
+<body class="text-slate-100 h-screen flex overflow-hidden font-sans antialiased select-none relative bg-transparent">
 
-    <!-- Live Looping Ocean Video Background -->
-    <video autoplay muted loop playsinline id="bg-video">
+    <!-- LIVE VIDEO BACKGROUND -->
+    <video autoplay loop muted playsinline id="bg-video">
         <source src="{{ url_for('static', filename='video/ocean.mp4') }}" type="video/mp4">
     </video>
-    <div class="video-overlay"></div>
+    <div class="fixed inset-0 bg-slate-950/45 backdrop-blur-[1px] z-0 pointer-events-none"></div>
 
-    <!-- Left Sidebar: History & User Session -->
-    <aside id="sidebar-container"
-        class="w-72 glass-panel border-r border-slate-200 dark:border-slate-800 flex flex-col h-full z-20 relative transition-colors duration-200">
-        <div class="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-                <div
-                    class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-500 dark:text-cyan-400 flex items-center justify-center font-bold">
-                    <i class="fa-solid fa-water"></i>
-                </div>
-                <div>
-                    <h1 class="font-bold text-sm tracking-wide text-slate-900 dark:text-slate-100">FloatChat AI</h1>
-                    <p class="text-[10px] text-slate-500 dark:text-slate-400">ARGO In-Situ Discovery</p>
-                </div>
-            </div>
-            <button type="button" onclick="startNewChat()" title="New Chat Session"
-                class="px-2.5 py-1 rounded-lg bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-cyan-600 dark:text-cyan-400 text-xs border border-slate-300 dark:border-slate-700 flex items-center gap-1 transition">
-                <i class="fa-solid fa-plus"></i> New
-            </button>
-        </div>
-
-        <div class="p-3 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/50">
-            <span
-                class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-1 flex items-center gap-1.5">
-                <i class="fa-solid fa-database text-cyan-500 dark:text-cyan-400 text-[10px]"></i> ChromaDB History
-            </span>
-            <span id="history-count"
-                class="text-[10px] bg-slate-200 dark:bg-slate-800/90 text-cyan-600 dark:text-cyan-300 px-2 py-0.5 rounded-full font-mono">0</span>
-        </div>
-
-        <div id="history-list" class="flex-1 overflow-y-auto p-2 space-y-1 text-xs"></div>
-
-        <!-- Sidebar Footer with Working Theme Switcher -->
-        <div class="p-3 border-t border-slate-200 dark:border-slate-800/80 flex flex-col gap-2.5">
-            <div class="flex items-center justify-between text-xs">
-                <button type="button" onclick="clearAllHistory()"
-                    class="text-rose-500 dark:text-rose-400 hover:underline transition flex items-center gap-1.5 text-[11px]">
-                    <i class="fa-regular fa-trash-can"></i> Clear History
-                </button>
-
-                <!-- Functional Dark / Light Switch Button -->
-                <button type="button" id="theme-toggle" onclick="toggleTheme()"
-                    class="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 transition"
-                    title="Toggle Light / Dark Mode">
-                    <i id="theme-icon" class="fa-solid fa-moon text-indigo-500 dark:text-amber-300 text-xs"></i>
-                    <span id="theme-text"
-                        class="text-[11px] font-semibold text-slate-700 dark:text-slate-200">Dark</span>
-                </button>
-            </div>
-
-            <div
-                class="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80 text-xs">
-                <div class="flex items-center gap-2 truncate">
+    <!-- SIDEBAR -->
+    <aside
+        class="w-64 sm:w-72 bg-slate-900/70 backdrop-blur-xl border-r border-slate-700/50 flex flex-col justify-between shrink-0 z-20 shadow-2xl">
+        <div class="p-3.5 border-b border-slate-700/40">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
                     <div
-                        class="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-xs">
-                        <i class="fa-solid fa-user"></i>
+                        class="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
+                        <i class="fa-solid fa-water text-xs"></i>
                     </div>
-                    <span class="text-[11px] text-slate-700 dark:text-slate-300 font-medium truncate max-w-[120px]"
-                        title="Authenticated User">
-                        {{ current_user or 'Operator' }}
-                    </span>
+                    <div>
+                        <h1 class="font-bold text-xs text-slate-100 tracking-wide">FloatChat AI</h1>
+                        <p class="text-[9px] text-cyan-400 font-mono">ARGO In-Situ Discovery</p>
+                    </div>
                 </div>
+                <div class="flex items-center gap-1">
+                    <button onclick="resetWorkspace()" title="Reset Session"
+                        class="px-2 py-1 text-[11px] bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded-md flex items-center gap-1 transition-all">
+                        <i class="fa-solid fa-rotate-right text-[9px]"></i> Reset
+                    </button>
+                    <button onclick="startNewSession()"
+                        class="px-2 py-1 text-[11px] bg-cyan-600/40 hover:bg-cyan-600/60 text-cyan-200 border border-cyan-500/50 rounded-md flex items-center gap-1 transition-all">
+                        <i class="fa-solid fa-plus text-[9px]"></i> New
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-300 px-1">
+                <span class="font-mono flex items-center gap-1.5"><i class="fa-solid fa-database text-cyan-400"></i>
+                    CHROMADB HISTORY</span>
+                <span id="history-count"
+                    class="px-1.5 py-0.2 rounded bg-slate-800/80 text-[10px] font-mono text-slate-200">0</span>
+            </div>
+        </div>
+
+        <div id="history-container" class="flex-1 overflow-y-auto p-2 space-y-1">
+            <div class="p-3 text-center text-xs text-slate-400">Loading history...</div>
+        </div>
+
+        <div class="p-3 border-t border-slate-700/40 bg-slate-900/80 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div
+                    class="w-6 h-6 rounded-full bg-cyan-500/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 text-xs">
+                    <i class="fa-solid fa-user"></i>
+                </div>
+                <div class="text-xs">
+                    <p class="font-semibold text-slate-200 capitalize truncate max-w-[100px]">{{ current_user }}</p>
+                    <p class="text-[9px] text-emerald-400 font-mono">● Connected</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <button onclick="clearAllHistory()" title="Clear History"
+                    class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 rounded transition-colors text-xs">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
                 <a href="/logout" title="Sign Out"
-                    class="text-slate-400 hover:text-rose-500 transition text-[11px] flex items-center gap-1">
-                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    class="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-800/80 rounded transition-colors text-xs">
+                    <i class="fa-solid fa-right-from-bracket"></i>
                 </a>
             </div>
         </div>
     </aside>
 
-    <!-- Main Workspace -->
-    <div class="flex-1 flex flex-col h-full overflow-hidden z-10 relative">
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative z-10 bg-transparent">
 
-        <!-- Header with View Switcher -->
-        <header id="main-header"
-            class="glass-panel px-6 py-3 flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 transition-colors duration-200">
-            <div class="flex items-center gap-3">
-                <div
-                    class="flex items-center bg-slate-200/90 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-300 dark:border-slate-700/80 text-xs">
-                    <button type="button" id="tab-chat" onclick="switchView('chat')"
-                        class="px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-cyan-600 text-white shadow-sm">
-                        <i class="fa-solid fa-message"></i> AI Chat Workspace
-                    </button>
-                    <button type="button" id="tab-globe" onclick="switchView('globe')"
-                        class="px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300">
-                        <i class="fa-solid fa-earth-americas text-cyan-600 dark:text-cyan-400"></i> 3D Globe Explorer
-                    </button>
-                </div>
-            </div>
-
-            <div id="active-region-badge"
-                class="flex items-center gap-2 bg-slate-200/90 dark:bg-slate-900/90 border border-slate-300 dark:border-cyan-500/40 px-3 py-1.5 rounded-xl text-xs">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span class="text-slate-500 dark:text-slate-400">Active Station:</span>
-                <span id="active-region-name" class="font-semibold text-cyan-600 dark:text-cyan-300">Arabian Sea
-                    (18.0°N, 65.0°E)</span>
-            </div>
-        </header>
-
-        <!-- VIEW 1: CHAT WORKSPACE SECTION -->
-        <div id="view-chat-container" class="flex-1 flex flex-col h-full overflow-hidden">
-            <main id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-6">
-                <div id="welcome-message" class="flex items-start space-x-3">
-                    <div
-                        class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
-                        <i class="fa-solid fa-compass"></i>
-                    </div>
-                    <div id="welcome-card"
-                        class="glass-panel p-5 text-sm rounded-2xl max-w-4xl shadow-lg space-y-3 border-l-4 border-cyan-500 border border-slate-200 dark:border-slate-800">
-                        <div>
-                            <p class="font-semibold text-cyan-600 dark:text-cyan-400 text-base" id="welcome-title">ARGO
-                                Intelligence Hub Ready</p>
-                            <p class="text-xs text-slate-600 dark:text-slate-300 mt-1" id="welcome-desc">Upload any
-                                document, PDF, or text file to extract queries, or explore global stations on the
-                                <strong>3D Globe Explorer</strong>.</p>
-                        </div>
-
-                        <div class="pt-2 border-t border-slate-200 dark:border-slate-800/80">
-                            <p
-                                class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5 flex items-center gap-1.5">
-                                <i class="fa-solid fa-lightbulb text-amber-500"></i> <span
-                                    id="suggestions-header">Suggested Inquiries:</span>
-                            </p>
-                            <div id="welcome-suggestions-container" class="flex flex-wrap gap-2"></div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            <!-- Staged File Preview Banner -->
-            <div id="file-preview-banner"
-                class="hidden px-6 py-2 bg-slate-200 dark:bg-slate-900/90 border-t border-cyan-500/40 flex items-center justify-between text-xs text-cyan-600 dark:text-cyan-400">
-                <div class="flex items-center gap-2.5">
-                    <i class="fa-solid fa-file-arrow-up text-cyan-500 text-sm"></i>
-                    <div>
-                        <span id="staged-file-name" class="font-semibold text-slate-900 dark:text-slate-100"></span>
-                        <span id="staged-file-size"
-                            class="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5"></span>
-                    </div>
-                </div>
-                <button type="button" onclick="removeStagedFile()"
-                    class="text-slate-500 hover:text-rose-500 px-2 py-1 rounded transition flex items-center gap-1">
-                    <i class="fa-solid fa-xmark"></i> Remove
+        <!-- Header -->
+        <header
+            class="h-12 border-b border-slate-700/40 bg-slate-900/50 backdrop-blur-md px-4 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2">
+                <button id="tab-btn-chat" onclick="switchView('chat')"
+                    class="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-cyan-600/40 text-cyan-200 border border-cyan-500/50 transition-all shadow-md">
+                    <i class="fa-solid fa-message"></i> AI Chat Workspace
+                </button>
+                <button id="tab-btn-globe" onclick="switchView('globe')"
+                    class="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-800/50 border border-transparent transition-all">
+                    <i class="fa-solid fa-earth-americas text-cyan-400"></i> 3D Globe Explorer
                 </button>
             </div>
 
-            <!-- Suggestion Chips Bar -->
-            <div
-                class="px-6 py-2 border-t border-slate-200 dark:border-slate-800/60 glass-panel flex items-center gap-2 overflow-x-auto text-xs">
-                <span
-                    class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap flex items-center gap-1">
-                    <i class="fa-solid fa-bolt text-cyan-500"></i><span id="quick-queries-label">Quick Queries:</span>
-                </span>
-                <div id="quick-chips-container" class="flex items-center gap-2"></div>
-            </div>
-
-            <!-- Chat Input Bar -->
-            <footer id="main-footer"
-                class="p-4 glass-panel border-t border-slate-200 dark:border-slate-800/80 transition-colors duration-200">
-                <form id="chat-form" class="max-w-4xl mx-auto flex items-center gap-2">
-                    <input type="file" id="file-input" class="hidden"
-                        accept=".csv,.txt,.json,.nc,.dat,.pdf,.png,.jpg,.jpeg" onchange="handleFileSelected(event)" />
-
-                    <button type="button" onclick="document.getElementById('file-input').click()"
-                        title="Upload Document or Scan (.pdf, .txt, .csv, .png)"
-                        class="p-3 bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-900/90 dark:hover:bg-slate-800 text-slate-700 hover:text-cyan-600 dark:text-slate-300 dark:hover:text-cyan-400 rounded-xl border border-slate-300 dark:border-slate-700 transition flex items-center justify-center">
-                        <i class="fa-solid fa-paperclip text-sm"></i>
-                    </button>
-
-                    <select id="voice-lang" onchange="updateLanguageUI()"
-                        class="bg-slate-200/90 dark:bg-slate-900/90 text-cyan-700 dark:text-cyan-400 text-xs px-2.5 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer transition font-medium"
-                        title="Select Language">
-                        <option value="en-IN" selected>🌐 English</option>
-                        <option value="hi-IN">🇮🇳 हिन्दी (Hindi)</option>
-                        <option value="mr-IN">🚩 मराठी (Marathi)</option>
-                    </select>
-
-                    <button type="button" id="mic-btn" onclick="toggleVoiceRecording()" title="Voice Input"
-                        class="p-3 bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-900/90 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-emerald-500 rounded-xl border border-slate-300 dark:border-slate-700 transition">
-                        <i id="mic-icon" class="fa-solid fa-microphone text-sm"></i>
-                    </button>
-
-                    <input id="user-input" type="text"
-                        placeholder="Show me dissolved oxygen (DOXY) profile at 200 dbar / प्रश्न विचारा..."
-                        class="flex-1 bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 text-sm px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
-                        autocomplete="off" />
-
-                    <button type="submit" id="send-btn"
-                        class="bg-cyan-600 hover:bg-cyan-500 text-white font-medium px-5 py-3 rounded-xl flex items-center gap-2 text-sm shadow-md transition disabled:opacity-50">
-                        <span>Execute</span>
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
-                </form>
-            </footer>
-        </div>
-
-        <!-- VIEW 2: DEDICATED 3D WORLD GLOBE EXPLORER SECTION -->
-        <div id="view-globe-container" class="hidden flex-1 flex flex-col h-full overflow-hidden p-6 relative">
-            <div
-                class="glass-panel border border-slate-200 dark:border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden relative shadow-2xl">
+            <div class="flex items-center gap-2.5">
                 <div
-                    class="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-200/60 dark:bg-slate-900/60">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-earth-americas text-cyan-600 dark:text-cyan-400 text-base"></i>
-                        <div>
-                            <h3 class="text-xs font-bold text-slate-900 dark:text-slate-200">Global Digital Ocean Globe
-                            </h3>
-                            <p class="text-[10px] text-slate-500 dark:text-slate-400">Hover across ocean stations &
-                                major trenches or click to track coordinates</p>
+                    class="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/70 border border-slate-700/50 text-[11px] font-mono">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-slate-300">Station:</span>
+                    <span id="active-station-badge" class="text-cyan-300 font-bold truncate max-w-[200px]">Float 2902781
+                        (Bay of Bengal)</span>
+                </div>
+
+                <div class="flex items-center bg-slate-900/80 border border-slate-700 rounded-lg p-0.5 text-xs">
+                    <button onclick="setLanguage('en')" id="lang-btn-en"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600 text-white transition-all">EN</button>
+                    <button onclick="setLanguage('hi')" id="lang-btn-hi"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold text-slate-400 hover:text-white transition-all">हिन्दी</button>
+                    <button onclick="setLanguage('mr')" id="lang-btn-mr"
+                        class="px-2 py-0.5 rounded text-[11px] font-semibold text-slate-400 hover:text-white transition-all">मराठी</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Body -->
+        <div class="flex-1 overflow-hidden relative bg-transparent">
+
+            <!-- TAB 1: CHAT WORKSPACE -->
+            <section id="view-chat" class="h-full flex flex-col justify-between bg-transparent">
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 max-w-5xl mx-auto w-full">
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="w-8 h-8 rounded-lg bg-cyan-500/30 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shrink-0 mt-0.5 shadow-md">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div
+                            class="p-4 rounded-2xl bg-slate-900/75 backdrop-blur-xl border border-slate-700/60 max-w-2xl text-xs space-y-2 text-slate-100 shadow-2xl">
+                            <p id="greeting-title" class="font-semibold text-cyan-300 text-sm">FloatChat Hydrographic
+                                Engine Active</p>
+                            <p id="greeting-desc" class="text-slate-200">Query global ocean telemetry in
+                                <strong>English, Hindi, and Marathi</strong> or upload oceanographic research figures
+                                and scans.
+                            </p>
+                            <div class="flex flex-wrap gap-1.5 pt-1" id="greeting-chips"></div>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Quick Landmarks:</span>
-                        <button type="button" onclick="flyToLandmark(11.35, 142.20, 'Mariana Trench (Challenger Deep)')"
-                            class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs transition">
-                            Mariana Trench
-                        </button>
-                        <button type="button" onclick="flyToLandmark(21.40, 64.20, 'Oman Upwelling (Arabian Sea OMZ)')"
-                            class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs transition">
-                            Arabian Sea OMZ
-                        </button>
-                        <button type="button" onclick="flyToLandmark(0.50, 165.00, 'Equatorial Pacific Warm Pool')"
-                            class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-slate-300 dark:border-slate-700 rounded-lg text-xs transition">
-                            Pacific Warm Pool
-                        </button>
-                    </div>
                 </div>
 
-                <div id="dedicated-globe-plot" class="flex-1 w-full h-full"></div>
+                <div class="p-3 border-t border-slate-700/40 bg-slate-900/60 backdrop-blur-xl">
+                    <div class="max-w-5xl mx-auto flex items-center gap-2 mb-2 overflow-x-auto pb-1 text-xs">
+                        <span id="quick-queries-label"
+                            class="text-cyan-400 font-bold flex items-center gap-1 whitespace-nowrap text-[11px]">
+                            <i class="fa-solid fa-bolt text-cyan-300"></i> QUICK QUERIES:
+                        </span>
+                        <div id="quick-queries-container" class="flex items-center gap-2 flex-nowrap"></div>
+                    </div>
 
+                    <form id="chat-form" onsubmit="handleChatSubmit(event)"
+                        class="max-w-5xl mx-auto relative flex items-center gap-2">
+                        <label title="Upload PDF or Image"
+                            class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-300 hover:text-cyan-300 cursor-pointer transition-all shrink-0 shadow-lg">
+                            <i class="fa-solid fa-paperclip"></i>
+                            <input type="file" id="file-input" onchange="handleFileUpload(event)"
+                                accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.json,.dat" class="hidden">
+                        </label>
+
+                        <div class="relative flex-1">
+                            <input type="text" id="user-input"
+                                placeholder="Query temperature, salinity, oxygen, or thermocline telemetry..."
+                                autocomplete="off"
+                                class="w-full h-10 bg-slate-950/70 border border-slate-700/80 focus:border-cyan-400 focus:outline-none rounded-xl px-4 text-xs text-slate-100 placeholder-slate-400 transition-colors pr-10 shadow-inner backdrop-blur-sm">
+                            <span id="upload-indicator"
+                                class="hidden absolute right-3 top-2.5 text-xs text-amber-400 font-mono animate-pulse">
+                                <i class="fa-solid fa-spinner fa-spin"></i>
+                            </span>
+                        </div>
+
+                        <button type="button" id="mic-btn" onclick="toggleSpeechRecognition()" title="Voice Input"
+                            class="w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-600 flex items-center justify-center text-slate-300 hover:text-cyan-300 transition-all shrink-0 shadow-lg">
+                            <i class="fa-solid fa-microphone"></i>
+                        </button>
+
+                        <button type="submit"
+                            class="h-10 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950/50 transition-all shrink-0">
+                            <span>Send</span>
+                            <i class="fa-solid fa-paper-plane text-[10px]"></i>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- TAB 2: 3D GLOBE EXPLORER -->
+            <section id="view-globe"
+                class="h-full hidden flex-col justify-between p-2.5 sm:p-3.5 max-w-7xl mx-auto w-full bg-transparent overflow-hidden">
                 <div
-                    class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-200/80 dark:bg-slate-900/80 flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-3">
-                        <span class="text-slate-600 dark:text-slate-400">Selected Target:</span>
-                        <span id="globe-selected-coords"
-                            class="font-mono text-cyan-700 dark:text-cyan-300 font-semibold">Lat: 18.00°N | Lon:
-                            65.00°E</span>
-                        <span id="globe-selected-basin"
-                            class="bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/30 px-2 py-0.5 rounded text-[11px]">Arabian
-                            Sea</span>
+                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-slate-900/70 backdrop-blur-xl border border-slate-700/50 rounded-xl shrink-0 shadow-lg">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-globe text-cyan-400 text-sm"></i>
+                        <span class="text-xs font-bold text-slate-200">Global Digital Ocean Globe</span>
+                        <span class="text-[10px] text-slate-300 hidden sm:inline">— Click any point or landmark to
+                            inspect water column telemetry.</span>
                     </div>
-                    <button type="button" onclick="sendSelectedRegionToChat()"
-                        class="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium rounded-xl shadow-md transition flex items-center gap-1.5">
-                        <i class="fa-solid fa-arrow-right"></i> Ask FloatChat About This Region
-                    </button>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-[10px] text-slate-400 font-mono uppercase mr-0.5">Landmarks:</span>
+                        <button onclick="teleportGlobe(11.35, 142.20, 'Mariana Trench (Challenger Deep)')"
+                            class="px-2 py-0.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded text-[10px] transition-colors border border-slate-600">Mariana
+                            Trench</button>
+                        <button onclick="teleportGlobe(21.40, 64.20, 'Oman Upwelling (Arabian Sea OMZ)')"
+                            class="px-2 py-0.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded text-[10px] transition-colors border border-slate-600">Arabian
+                            Sea OMZ</button>
+                        <button onclick="teleportGlobe(0.50, 165.00, 'Equatorial Pacific Warm Pool')"
+                            class="px-2 py-0.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded text-[10px] transition-colors border border-slate-600">Pacific
+                            Warm Pool</button>
+                    </div>
                 </div>
-            </div>
+
+                <div class="flex-1 min-h-0 bg-slate-950/40 backdrop-blur-md border border-slate-700/50 rounded-2xl overflow-hidden relative my-2 shadow-2xl flex items-center justify-center"
+                    id="globe-container">
+                    <div id="globe-loading"
+                        class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-10 text-cyan-400 font-mono text-xs gap-2">
+                        <i class="fa-solid fa-compass fa-spin text-2xl"></i>
+                        <span>Loading 3D Orthographic Ocean Telemetry...</span>
+                    </div>
+                    <div id="plotly-globe-target" class="w-full h-full"></div>
+                </div>
+
+                <!-- HUD FOOTER -->
+                <div id="globe-footer"
+                    class="p-2 sm:p-2.5 bg-slate-900/80 backdrop-blur-xl border border-cyan-500/40 rounded-xl shadow-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 shrink-0 z-20">
+                    <div class="flex items-center gap-2.5 min-w-[240px] shrink-0">
+                        <div
+                            class="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400 text-sm shrink-0 shadow-inner">
+                            <i class="fa-solid fa-location-dot"></i>
+                        </div>
+                        <div class="overflow-hidden">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span id="footer-station-name"
+                                    class="text-xs font-bold text-white tracking-wide truncate">Float 2902781</span>
+                                <span id="footer-basin-badge"
+                                    class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-700">Bay
+                                    of Bengal</span>
+                            </div>
+                            <p class="text-[10px] text-slate-300 font-mono mt-0.5">
+                                Lat: <strong id="footer-lat" class="text-cyan-300 font-semibold">15.2°N</strong> |
+                                Lon: <strong id="footer-lon" class="text-cyan-300 font-semibold">88.5°E</strong> |
+                                SST: <strong id="footer-sst" class="text-amber-400 font-semibold">29.4 °C</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        class="flex-1 bg-slate-950/70 border border-slate-700/60 rounded-lg px-2.5 py-1.5 flex flex-col justify-center min-w-0 shadow-inner">
+                        <div
+                            class="flex items-center justify-between text-[9px] uppercase font-mono tracking-wider mb-0.5">
+                            <span class="flex items-center gap-1 text-amber-400 font-bold">
+                                <span>🪄</span>
+                                <span id="footer-prompt-label" class="text-slate-300">COMPREHENSIVE TELEMETRY
+                                    QUERY:</span>
+                            </span>
+                            <span class="text-emerald-400 font-mono font-bold text-[8px] tracking-wide">CTD • DOXY •
+                                GRADIENT</span>
+                        </div>
+                        <p id="footer-generated-query" class="text-[11px] text-white font-medium italic truncate">
+                            "Analyze vertical temperature, salinity, DOXY, and thermocline gradient at 15.2°N, 88.5°E in
+                            the Bay of Bengal."
+                        </p>
+                    </div>
+
+                    <div class="flex items-center justify-end shrink-0">
+                        <button onclick="redirectFooterQueryToChat()"
+                            class="w-full sm:w-auto px-3.5 py-1.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/60 transition-all active:scale-95">
+                            <span id="footer-query-btn-text">Query in Chat</span>
+                            <span class="text-xs">→</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
         </div>
-    </div>
+    </main>
 
-    <!-- Script Logic -->
+    <!-- SCRIPT LOGIC -->
     <script>
-        const chatBox = document.getElementById('chat-box');
-        const chatForm = document.getElementById('chat-form');
-        const userInput = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
-        const historyList = document.getElementById('history-list');
-        const historyCount = document.getElementById('history-count');
-        const fileInput = document.getElementById('file-input');
-        const fileBanner = document.getElementById('file-preview-banner');
-        const stagedFileName = document.getElementById('staged-file-name');
-        const stagedFileSize = document.getElementById('staged-file-size');
-        const micBtn = document.getElementById('mic-btn');
-        const micIcon = document.getElementById('mic-icon');
-        const themeIcon = document.getElementById('theme-icon');
-        const themeText = document.getElementById('theme-text');
-        const voiceLangSelect = document.getElementById('voice-lang');
-        const welcomeSuggestionsContainer = document.getElementById('welcome-suggestions-container');
-        const quickChipsContainer = document.getElementById('quick-chips-container');
-        const quickQueriesLabel = document.getElementById('quick-queries-label');
-        const suggestionsHeader = document.getElementById('suggestions-header');
-        const activeRegionName = document.getElementById('active-region-name');
-
-        const viewChatContainer = document.getElementById('view-chat-container');
-        const viewGlobeContainer = document.getElementById('view-globe-container');
-        const tabChat = document.getElementById('tab-chat');
-        const tabGlobe = document.getElementById('tab-globe');
-        const globeSelectedCoords = document.getElementById('globe-selected-coords');
-        const globeSelectedBasin = document.getElementById('globe-selected-basin');
-
-        let dbHistory = [];
-        let stagedFile = null;
+        let currentTargetLat = 15.2;
+        let currentTargetLon = 88.5;
+        let currentSelectedQuery = "Analyze vertical temperature, salinity, DOXY, and thermocline gradient at 15.2°N, 88.5°E in the Bay of Bengal.";
+        let globeRendered = false;
+        let currentLang = "en";
         let isRecording = false;
         let recognition = null;
-        let pinnedLocation = { lat: 18.0, lon: 65.0, basin: "Arabian Sea", id: "5905082" };
-        let dedicatedGlobeRendered = false;
 
-        const languageData = {
-            'en-IN': {
-                placeholder: "Show me dissolved oxygen (DOXY) at 200 dbar / Ask any question...",
-                label: "Quick Queries:",
-                header: "Suggested Inquiries:",
-                queries: [
-                    { full: "Show me the dissolved oxygen (DOXY) profile at 200 dbar", label: "3D DOXY at 200 dbar", icon: "fa-biohazard" },
-                    { full: "What is the temperature and salinity at 100 dbar depth?", label: "3D CTD at 100 dbar", icon: "fa-water" },
-                    { full: "Explain the ocean thermocline dynamics and thermal gradient", label: "3D Thermocline Dynamics", icon: "fa-chart-line" }
+        const I18N = {
+            en: {
+                placeholder: "Query temperature, salinity, oxygen, or thermocline telemetry...",
+                quickLabel: "QUICK QUERIES:",
+                queryBtn: "Query in Chat",
+                promptLabel: "COMPREHENSIVE TELEMETRY QUERY:",
+                greetingTitle: "FloatChat Hydrographic Engine Active",
+                greetingDesc: "Query global ocean telemetry in <strong>English, Hindi, and Marathi</strong> or upload research scans.",
+                chips: [
+                    { label: "🌊 Arabian Sea 100 dbar", query: "What is the average sea temperature at 100 dbar in the Arabian Sea?" },
+                    { label: "⚖️ Compare 2 Stations", query: "Compare temperature profiles near 15°N, 65°E and 10°N, 70°E." },
+                    { label: "🌐 Equatorial Array (±5°)", query: "Find ARGO observations within 5° of the equator from the last year." }
+                ],
+                quick: [
+                    { label: "3D DOXY at 200 dbar", query: "Show 3D Dissolved Oxygen (DOXY) profile at 200 dbar in Arabian Sea." },
+                    { label: "3D CTD at 100 dbar", query: "What is the 3D CTD average temperature and salinity at 100 dbar in Arabian Sea." },
+                    { label: "3D Thermocline Dynamics", query: "Analyze 3D thermocline dynamics and dT/dz thermal gradient near 18°N, 65°E." }
                 ]
             },
-            'mr-IN': {
-                placeholder: "२०० dbar खोलीवर विरघळलेला ऑक्सिजन (DOXY) दाखवा / प्रश्न विचारा...",
-                label: "जलद प्रश्न (Quick Queries):",
-                header: "सुचवलेले प्रश्न:",
-                queries: [
-                    { full: "२०० dbar खोलीवर विरघळलेला ऑक्सिजन (DOXY) प्रोफाइल दाखवा", label: "३D २०० dbar DOXY प्रोफाइल", icon: "fa-biohazard" },
-                    { full: "१०० dbar खोलीवर पाण्याचे तापमान आणि क्षारता काय आहे?", label: "३D १०० dbar CTD", icon: "fa-water" },
-                    { full: "थर्मोक्लाइन तापमान प्रवणता (gradient) स्पष्ट करा", label: "३D थर्मोक्लाइन माहिती", icon: "fa-chart-line" }
+            hi: {
+                placeholder: "तापमान, लवणता, ऑक्सीजन या थर्मोक्लाइन डेटा पूछें...",
+                quickLabel: "त्वरित प्रश्न (Quick Queries):",
+                queryBtn: "चैट में पूछें",
+                promptLabel: "विस्तृत महासागरीय प्रश्न:",
+                greetingTitle: "फ्लोटचैट हाइड्रोग्राफिक इंजन सक्रिय है",
+                greetingDesc: "<strong>अंग्रेजी, हिन्दी और मराठी</strong> में वैश्विक समुद्री डेटा पूछें या समुद्री चित्र अपलोड करें।",
+                chips: [
+                    { label: "🌊 अरब सागर 100 dbar", query: "अरब सागर में 100 dbar पर औसत तापमान और लवणता क्या है?" },
+                    { label: "⚖️ 2 स्टेशनों की तुलना", query: "15°N, 65°E और 10°N, 70°E के तापमान प्रोफाइल की तुलना करें।" },
+                    { label: "🌐 भूमध्यरेखीय सरणी (±5°)", query: "पिछले 1 वर्ष में भूमध्य रेखा के 5° के भीतर ARGO फ्लोट अवलोकन खोजें।" }
+                ],
+                quick: [
+                    { label: "3D ऑक्सीजन (DOXY) 200 dbar", query: "अरब सागर में 200 dbar गहराई पर 3D घुलित ऑक्सीजन (DOXY) प्रोफाइल दिखाइए।" },
+                    { label: "3D CTD 100 dbar गहराई", query: "अरब सागर में 100 dbar पर औसत तापमान और लवणता क्या है?" },
+                    { label: "3D थर्मोक्लाइन ग्रेडिएंट", query: "18°N, 65°E के पास 3D थर्मोक्लाइन गहराई और dT/dz ग्रेडिएंट का विश्लेषण करें।" }
                 ]
             },
-            'hi-IN': {
-                placeholder: "200 dbar गहराई पर घुलनशील ऑक्सीजन (DOXY) दिखाएं / प्रश्न पूछें...",
-                label: "त्वरित प्रश्न (Quick Queries):",
-                header: "सुझाए गए प्रश्न:",
-                queries: [
-                    { full: "200 dbar गहराई पर घुलनशील ऑक्सीजन (DOXY) प्रोफाइल दिखाइए", label: "3D 200 dbar DOXY प्रोफाइल", icon: "fa-biohazard" },
-                    { full: "100 dbar गहराई पर तापमान और लवणता क्या है?", label: "3D 100 dbar CTD", icon: "fa-water" },
-                    { full: "थर्मोक्लाइन और तापमान प्रवणता की व्याख्या करें", label: "3D थर्मोक्लाइन विवरण", icon: "fa-chart-line" }
+            mr: {
+                placeholder: "तापमान, क्षारता, प्राणवायू किंवा थर्मोक्लाइन डेटा विचारा...",
+                quickLabel: "त्वरित प्रश्न (Quick Queries):",
+                queryBtn: "चॅटमध्ये विचारा",
+                promptLabel: "सर्वसमावेशक सागरी प्रश्न:",
+                greetingTitle: "फ्लोटचॅट हायड्रोग्राफिक इंजिन कार्यरत आहे",
+                greetingDesc: "<strong>इंग्रजी, मराठी आणि हिंदी</strong> मध्ये जागतिक सागरी डेटा विचारा किंवा आकृत्या अपलोड करा.",
+                chips: [
+                    { label: "🌊 अरबी समुद्र 100 dbar", query: "अरबी समुद्रात 100 dbar खोलीवर पाण्याचे सरासरी तापमान किती आहे?" },
+                    { label: "⚖️ 2 केंद्रांची तुलना करा", query: "15°N, 65°E आणि 10°N, 70°E जवळील तापमान प्रोफाइलची तुलना करा." },
+                    { label: "🌐 विषुववृत्तीय केंद्र (±5°)", query: "गेल्या 1 वर्षातील विषुववृत्ताच्या 5° मधील ARGO निरीक्षणे शोधा." }
+                ],
+                quick: [
+                    { label: "3D ऑक्सिजन (DOXY) 200 dbar", query: "अरबी समुद्रात 200 dbar खोलीवर 3D विरघळलेला ऑक्सिजन (DOXY) दाखवा." },
+                    { label: "3D CTD 100 dbar खोली", query: "अरबी समुद्रात 100 dbar खोलीवर पाण्याचे सरासरी तापमान आणि क्षारता किती आहे?" },
+                    { label: "3D थर्मोक्लाइन ग्रेडियंट", query: "18°N, 65°E जवळ 3D थर्मोक्लाइन खोली आणि तापमान ग्रेडियंट (dT/dz) विश्लेषण करा." }
                 ]
             }
         };
 
-        // Complete Theme Controller Logic
-        function applySavedTheme() {
-            const savedTheme = localStorage.getItem('floatchat_theme') || 'dark';
-            if (savedTheme === 'light') {
-                document.documentElement.classList.remove('dark');
-                themeIcon.className = "fa-solid fa-moon text-indigo-500 text-xs";
-                themeText.textContent = "Dark";
-            } else {
-                document.documentElement.classList.add('dark');
-                themeIcon.className = "fa-solid fa-sun text-amber-300 text-xs";
-                themeText.textContent = "Light";
+        function setLanguage(lang) {
+            currentLang = lang;
+            ['en', 'hi', 'mr'].forEach(l => {
+                const btn = document.getElementById(`lang-btn-${l}`);
+                if (l === lang) {
+                    btn.className = "px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-600 text-white transition-all";
+                } else {
+                    btn.className = "px-2 py-0.5 rounded text-[11px] font-semibold text-slate-400 hover:text-white transition-all";
+                }
+            });
+
+            const dict = I18N[lang];
+            document.getElementById("user-input").placeholder = dict.placeholder;
+            document.getElementById("quick-queries-label").innerHTML = `<i class="fa-solid fa-bolt text-cyan-300"></i> ${dict.quickLabel}`;
+            document.getElementById("footer-query-btn-text").innerText = dict.queryBtn;
+            document.getElementById("footer-prompt-label").innerText = dict.promptLabel;
+
+            const gTitle = document.getElementById("greeting-title");
+            const gDesc = document.getElementById("greeting-desc");
+            if (gTitle) gTitle.innerText = dict.greetingTitle;
+            if (gDesc) gDesc.innerHTML = dict.greetingDesc;
+
+            const chipsContainer = document.getElementById("greeting-chips");
+            if (chipsContainer) {
+                chipsContainer.innerHTML = "";
+                dict.chips.forEach(c => {
+                    const btn = document.createElement("button");
+                    btn.className = "px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700/90 text-cyan-200 rounded text-[11px] transition-all border border-cyan-500/30";
+                    btn.innerText = c.label;
+                    btn.onclick = () => injectPrompt(c.query);
+                    chipsContainer.appendChild(btn);
+                });
             }
+
+            renderQuickQueries();
+            updateFooterTelemetry(currentTargetLat, currentTargetLon, document.getElementById("footer-station-name").innerText);
         }
 
-        function toggleTheme() {
-            const isDark = document.documentElement.classList.contains('dark');
-            const newTheme = isDark ? 'light' : 'dark';
-            localStorage.setItem('floatchat_theme', newTheme);
-            applySavedTheme();
-
-            // Re-render any active plotly plot templates
-            document.querySelectorAll('.js-plotly-plot').forEach(el => {
-                Plotly.relayout(el, {
-                    template: newTheme === 'dark' ? 'plotly_dark' : 'plotly_white',
-                    paper_bgcolor: newTheme === 'dark' ? '#1e222d' : '#ffffff',
-                    plot_bgcolor: newTheme === 'dark' ? '#1e222d' : '#f8fafc'
-                });
+        function renderQuickQueries() {
+            const container = document.getElementById("quick-queries-container");
+            container.innerHTML = "";
+            I18N[currentLang].quick.forEach(item => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/80 hover:border-cyan-500/50 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap shadow-sm";
+                btn.innerText = item.label;
+                btn.onclick = () => injectPrompt(item.query);
+                container.appendChild(btn);
             });
         }
 
-        function switchView(target) {
-            if (target === 'globe') {
-                viewChatContainer.classList.add('hidden');
-                viewGlobeContainer.classList.remove('hidden');
+        function resetWorkspace() {
+            if (!confirm("Reset current workspace view and clear active prompt?")) return;
+            document.getElementById("user-input").value = "";
+            switchView("chat");
+        }
 
-                tabGlobe.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-cyan-600 text-white shadow-sm";
-                tabChat.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300";
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("Speech recognition is not supported in this browser.");
+                return null;
+            }
+            const rec = new SpeechRecognition();
+            rec.continuous = false;
+            rec.interimResults = false;
 
-                if (!dedicatedGlobeRendered) {
-                    loadDedicated3DGlobe();
-                } else {
-                    Plotly.Plots.resize(document.getElementById('dedicated-globe-plot'));
+            rec.onstart = () => {
+                isRecording = true;
+                const micBtn = document.getElementById("mic-btn");
+                if (micBtn) micBtn.classList.add("mic-recording");
+            };
+
+            rec.onresult = (e) => {
+                const transcript = e.results[0][0].transcript;
+                const inputField = document.getElementById("user-input");
+                if (inputField) {
+                    inputField.value = transcript;
+                    document.getElementById("chat-form").dispatchEvent(new Event("submit"));
                 }
-            } else {
-                viewGlobeContainer.classList.add('hidden');
-                viewChatContainer.classList.remove('hidden');
+            };
 
-                tabChat.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-cyan-600 text-white shadow-sm";
-                tabGlobe.className = "px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300";
-            }
+            rec.onerror = (event) => {
+                console.error("Speech recognition error:", event.error);
+                stopRecording();
+            };
+
+            rec.onend = () => {
+                stopRecording();
+            };
+
+            return rec;
         }
 
-        async function loadDedicated3DGlobe() {
-            try {
-                const res = await fetch('/api/globe/full');
-                const data = await res.json();
-
-                const config = {
-                    responsive: true,
-                    displayModeBar: true,
-                    displaylogo: false,
-                    scrollZoom: true
-                };
-
-                const globeDiv = document.getElementById('dedicated-globe-plot');
-                await Plotly.newPlot(globeDiv, data.chart.data, data.chart.layout, config);
-                dedicatedGlobeRendered = true;
-
-                globeDiv.on('plotly_click', function (evt) {
-                    if (evt && evt.points && evt.points[0]) {
-                        const pt = evt.points[0];
-                        if (pt.lat !== undefined && pt.lon !== undefined) {
-                            flyToLandmark(pt.lat, pt.lon, pt.text ? pt.text.split('<br>')[0].replace(/<\/?[^>]+(>|$)/g, "") : 'Selected Station');
-                        }
-                    }
-                });
-            } catch (e) {
-                console.error("Globe Load Error:", e);
-            }
-        }
-
-        function flyToLandmark(lat, lon, name) {
-            pinnedLocation = { lat: lat, lon: lon, basin: name };
-            activeRegionName.textContent = `${name} (${lat.toFixed(1)}°N, ${lon.toFixed(1)}°E)`;
-            globeSelectedCoords.textContent = `Lat: ${lat.toFixed(2)}°N | Lon: ${lon.toFixed(2)}°E`;
-            globeSelectedBasin.textContent = name;
-
-            const globeDiv = document.getElementById('dedicated-globe-plot');
-            if (globeDiv && globeDiv.layout) {
-                Plotly.relayout(globeDiv, {
-                    'geo.projection.rotation.lat': lat,
-                    'geo.projection.rotation.lon': lon
-                });
-            }
-        }
-
-        function sendSelectedRegionToChat() {
-            switchView('chat');
-            userInput.value = `Analyze hydrographic profiles, temperature, and water mass characteristics near ${pinnedLocation.basin} (${pinnedLocation.lat.toFixed(1)}°N, ${pinnedLocation.lon.toFixed(1)}°E)`;
-            userInput.focus();
-        }
-
-        function handleFileSelected(e) {
-            const file = e.target.files[0];
-            if (file) {
-                stagedFile = file;
-                stagedFileName.textContent = file.name;
-                stagedFileSize.textContent = `(${(file.size / 1024).toFixed(1)} KB)`;
-                fileBanner.classList.remove('hidden');
-                userInput.focus();
-            }
-        }
-
-        function removeStagedFile() {
-            stagedFile = null;
-            fileInput.value = '';
-            fileBanner.classList.add('hidden');
-        }
-
-        function updateLanguageUI() {
-            const currentLang = voiceLangSelect.value;
-            const data = languageData[currentLang] || languageData['en-IN'];
-
-            userInput.placeholder = data.placeholder;
-            quickQueriesLabel.textContent = data.label;
-            suggestionsHeader.textContent = data.header;
-
-            welcomeSuggestionsContainer.innerHTML = data.queries.map(q => `
-                <button type="button" onclick="applySuggestion('${q.full}')" class="text-xs bg-slate-200/90 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-cyan-950 text-cyan-800 dark:text-cyan-300 hover:text-cyan-950 dark:hover:text-cyan-200 border border-slate-300 dark:border-slate-700 hover:border-cyan-500/50 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 text-left">
-                    <i class="fa-solid ${q.icon} text-[10px] text-cyan-600 dark:text-cyan-400"></i> ${q.full}
-                </button>
-            `).join('');
-
-            quickChipsContainer.innerHTML = data.queries.map(q => `
-                <button type="button" onclick="applySuggestion('${q.full}')" class="whitespace-nowrap px-2.5 py-1 bg-slate-200 dark:bg-slate-800/90 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-700 transition text-[11px]">
-                    ${q.label}
-                </button>
-            `).join('');
-        }
-
-        function applySuggestion(text) {
-            userInput.value = text;
-            userInput.focus();
-            chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-        }
-
-        function toggleVoiceRecording() {
-            if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-                alert("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
-                return;
-            }
+        function toggleSpeechRecognition() {
+            if (!recognition) recognition = initSpeechRecognition();
+            if (!recognition) return;
 
             if (isRecording) {
-                if (recognition) recognition.stop();
-                stopVoiceRecording();
+                recognition.stop();
             } else {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                recognition.lang = voiceLangSelect ? voiceLangSelect.value : 'en-IN';
-
-                recognition.onstart = function () {
-                    isRecording = true;
-                    micBtn.classList.add('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
-                    micIcon.className = "fa-solid fa-microphone-lines text-rose-400";
-                    userInput.placeholder = `Listening in ${voiceLangSelect.options[voiceLangSelect.selectedIndex].text}...`;
-                };
-
-                recognition.onresult = function (event) {
-                    const transcript = event.results[0][0].transcript;
-                    userInput.value = transcript;
-                    stopVoiceRecording();
-                    chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                };
-
-                recognition.onerror = function (event) {
-                    console.error("Speech Error:", event.error);
-                    stopVoiceRecording();
-                };
-
-                recognition.onend = function () {
-                    stopVoiceRecording();
-                };
-
-                recognition.start();
+                const langCodes = { en: "en-US", hi: "hi-IN", mr: "mr-IN" };
+                recognition.lang = langCodes[currentLang] || "en-US";
+                try {
+                    recognition.start();
+                } catch (err) {
+                    console.error("Recognition start error:", err);
+                    isRecording = false;
+                }
             }
         }
 
-        function stopVoiceRecording() {
+        function stopRecording() {
             isRecording = false;
-            micBtn.classList.remove('bg-rose-900/60', 'text-rose-400', 'border-rose-500', 'recording-pulse');
-            micIcon.className = "fa-solid fa-microphone text-slate-700 dark:text-slate-300";
-            updateLanguageUI();
+            const micBtn = document.getElementById("mic-btn");
+            if (micBtn) micBtn.classList.remove("mic-recording");
         }
 
-        async function loadHistoryFromDB() {
+        function cleanStationString(raw) {
+            if (!raw) return "Float 2902781";
+            let s = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+            const m = s.match(/(Float\s+\d+|[A-Za-z\s\(\)]+)/i);
+            return m ? m[0].split('Basin:')[0].split('Lat:')[0].trim() : s.substring(0, 30);
+        }
+
+        function getBasinName(lat, lon) {
+            if (lat < -50.0) return currentLang === "mr" ? "दक्षिण महासागर" : (currentLang === "hi" ? "दक्षिणी महासागर" : "Southern Ocean");
+            if (lat > 65.0) return "Arctic Ocean";
+            if (lat >= -50.0 && lat <= 30.0 && lon >= 45.0 && lon <= 100.0) {
+                if (lat >= 10.0 && lon <= 78.0) return currentLang === "mr" ? "अरबी समुद्र" : (currentLang === "hi" ? "अरब सागर" : "Arabian Sea");
+                if (lat >= 5.0 && lon > 78.0) return currentLang === "mr" ? "बंगालचा उपसागर" : (currentLang === "hi" ? "बंगाल की खाड़ी" : "Bay of Bengal");
+                return currentLang === "mr" ? "विषुववृत्तीय हिंदी महासागर" : (currentLang === "hi" ? "भूमध्य हिन्द महासागर" : "Equatorial Indian Ocean");
+            }
+            if (lon >= -70.0 && lon <= 20.0) return lat >= 0 ? "North Atlantic" : "South Atlantic";
+            return lat >= 0 ? "North Pacific" : "South Pacific";
+        }
+
+        function switchView(tab) {
+            const chatSec = document.getElementById("view-chat");
+            const globeSec = document.getElementById("view-globe");
+            const btnChat = document.getElementById("tab-btn-chat");
+            const btnGlobe = document.getElementById("tab-btn-globe");
+
+            if (tab === "chat") {
+                chatSec.classList.remove("hidden");
+                chatSec.classList.add("flex");
+                globeSec.classList.add("hidden");
+                globeSec.classList.remove("flex");
+
+                btnChat.className = "px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-cyan-600/40 text-cyan-200 border border-cyan-500/50 transition-all shadow-md";
+                btnGlobe.className = "px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-800/50 border border-transparent transition-all";
+            } else {
+                chatSec.classList.add("hidden");
+                chatSec.classList.remove("flex");
+                globeSec.classList.remove("hidden");
+                globeSec.classList.add("flex");
+
+                btnGlobe.className = "px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-cyan-600/40 text-cyan-200 border border-cyan-500/50 transition-all shadow-md";
+                btnChat.className = "px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-800/50 border border-transparent transition-all";
+
+                if (!globeRendered) {
+                    load3DGlobe();
+                } else {
+                    setTimeout(() => {
+                        const target = document.getElementById("plotly-globe-target");
+                        if (target) Plotly.Plots.resize(target);
+                    }, 50);
+                }
+            }
+        }
+
+        async function loadHistory() {
             try {
-                const res = await fetch('/history');
-                if (res.redirected) {
-                    window.location.href = res.url;
+                const res = await fetch("/history");
+                const data = await res.json();
+                const container = document.getElementById("history-container");
+                const countBadge = document.getElementById("history-count");
+
+                if (!data.history || data.history.length === 0) {
+                    container.innerHTML = '<div class="p-3 text-center text-xs text-slate-400">No previous sessions found.</div>';
+                    countBadge.innerText = "0";
                     return;
                 }
-                const data = await res.json();
-                dbHistory = data.history || [];
-                renderHistorySidebar();
-            } catch (e) {
-                console.error("Failed to load ChromaDB history:", e);
+
+                countBadge.innerText = data.history.length;
+                container.innerHTML = "";
+
+                data.history.forEach(session => {
+                    const item = document.createElement("div");
+                    item.className = "p-2 rounded-lg bg-slate-900/60 hover:bg-slate-800/80 border border-slate-700/50 hover:border-slate-600 cursor-pointer flex items-center justify-between text-xs text-slate-200 group transition-all";
+                    item.innerHTML = `
+                        <div class="truncate flex items-center gap-2 flex-1 mr-1" onclick="injectPrompt('${session.prompt.replace(/'/g, "\\'")}')">
+                            <i class="fa-regular fa-message text-cyan-400 text-[10px] shrink-0"></i>
+                            <span class="truncate">${session.prompt}</span>
+                        </div>
+                        <button onclick="deleteSingleHistory(event, '${session.id}')" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-400 p-1 transition-opacity">
+                            <i class="fa-solid fa-xmark text-[10px]"></i>
+                        </button>
+                    `;
+                    container.appendChild(item);
+                });
+            } catch (err) {
+                console.error("Error fetching history:", err);
             }
         }
 
-        function renderHistorySidebar() {
-            historyList.innerHTML = '';
-            historyCount.textContent = dbHistory.length;
-
-            if (dbHistory.length === 0) {
-                historyList.innerHTML = '<div class="p-3 text-slate-500 text-center text-[11px]">No saved ChromaDB sessions found.</div>';
-                return;
-            }
-
-            dbHistory.slice().reverse().forEach((item, idx) => {
-                const actualIdx = dbHistory.length - 1 - idx;
-                const el = document.createElement('div');
-                el.className = "group flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800/80 cursor-pointer transition text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-300 dark:hover:border-slate-700/60";
-                el.innerHTML = `
-                    <div class="flex items-center gap-2 flex-1 min-w-0 pr-2" onclick="displaySavedSession(${actualIdx})">
-                        <i class="fa-regular fa-message text-cyan-600 dark:text-cyan-400 text-xs"></i>
-                        <span class="truncate font-medium">${item.prompt}</span>
-                    </div>
-                    <button type="button" onclick="event.stopPropagation(); deleteDbSession('${item.id}')" title="Delete" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 p-1 transition">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                `;
-                historyList.appendChild(el);
-            });
-        }
-
-        function displaySavedSession(index) {
-            const session = dbHistory[index];
-            if (!session) return;
-            switchView('chat');
-            chatBox.innerHTML = '';
-            appendUserMessage(session.prompt, session.time);
-            appendBotMessage(session.reply, session.chart, session.time);
-        }
-
-        async function deleteDbSession(entryId) {
-            try {
-                await fetch(`/history/${entryId}`, { method: 'DELETE' });
-                await loadHistoryFromDB();
-            } catch (e) {
-                console.error("Delete error:", e);
-            }
+        async function deleteSingleHistory(e, id) {
+            e.stopPropagation();
+            if (!confirm("Delete this conversation entry?")) return;
+            await fetch(`/history/${id}`, { method: "DELETE" });
+            loadHistory();
         }
 
         async function clearAllHistory() {
-            if (!confirm("Are you sure you want to clear all ChromaDB chat history for your session?")) return;
+            if (!confirm("Clear all ChromaDB session history?")) return;
+            await fetch("/history/clear", { method: "POST" });
+            loadHistory();
+            document.getElementById("chat-messages").innerHTML = "";
+            injectSystemGreeting();
+        }
+
+        function startNewSession() {
+            document.getElementById("chat-messages").innerHTML = "";
+            injectSystemGreeting();
+            switchView("chat");
+        }
+
+        function injectSystemGreeting() {
+            const container = document.getElementById("chat-messages");
+            const dict = I18N[currentLang];
+            let chipsHtml = dict.chips.map(c => `
+                <button onclick="injectPrompt('${c.query}')" class="px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700/90 text-cyan-200 rounded text-[11px] transition-all border border-cyan-500/30">${c.label}</button>
+            `).join("");
+
+            container.innerHTML = `
+                <div class="flex items-start gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-cyan-500/30 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shrink-0 mt-0.5 shadow-md">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="p-4 rounded-2xl bg-slate-900/75 backdrop-blur-xl border border-slate-700/60 max-w-2xl text-xs space-y-2 text-slate-100 shadow-2xl">
+                        <p id="greeting-title" class="font-semibold text-cyan-300 text-sm">${dict.greetingTitle}</p>
+                        <p id="greeting-desc" class="text-slate-200">${dict.greetingDesc}</p>
+                        <div class="flex flex-wrap gap-1.5 pt-1" id="greeting-chips">
+                            ${chipsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function injectPrompt(text) {
+            document.getElementById("user-input").value = text;
+            document.getElementById("chat-form").dispatchEvent(new Event("submit"));
+        }
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const input = document.getElementById("user-input");
+            const text = input.value.trim();
+            if (!text) return;
+
+            appendUserMessage(text);
+            input.value = "";
+            const loadingId = appendLoadingIndicator();
+
             try {
-                await fetch('/history/clear', { method: 'POST' });
-                dbHistory = [];
-                renderHistorySidebar();
-                startNewChat();
-            } catch (e) {
-                console.error("Clear error:", e);
+                const res = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        message: text,
+                        lat: currentTargetLat,
+                        lon: currentTargetLon
+                    })
+                });
+                const data = await res.json();
+                removeMessage(loadingId);
+                appendAIMessage(text, data.reply, data.chart, data.share_id);
+                loadHistory();
+            } catch (err) {
+                removeMessage(loadingId);
+                appendAIMessage(text, `⚠️ Error processing query: ${err.message}`, null, null);
             }
         }
 
-        function appendUserMessage(text, timestamp, attachedFileName = null) {
-            const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const fileBadge = attachedFileName ? `
-                <div class="inline-flex items-center gap-1.5 bg-blue-700 text-white text-[11px] px-2.5 py-1 rounded-md mb-2 border border-blue-400">
-                    <i class="fa-solid fa-file-lines"></i>
-                    <span>Attached: ${attachedFileName}</span>
-                </div><br>
-            ` : '';
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
 
-            const msgHtml = `
-                <div class="flex justify-end">
-                    <div class="bg-blue-600 text-white p-4 text-sm rounded-2xl max-w-2xl shadow-md">
-                        ${fileBadge}
-                        <p>${text || (attachedFileName ? 'Uploaded document for analysis.' : '')}</p>
-                        <span class="block text-right text-[10px] text-blue-200 mt-1">${time}</span>
-                    </div>
-                </div>
-            `;
-            chatBox.insertAdjacentHTML('beforeend', msgHtml);
-            scrollToBottom();
+            const uploadIndicator = document.getElementById("upload-indicator");
+            uploadIndicator.classList.remove("hidden");
+
+            appendUserMessage(`📎 Attached: <strong>${file.name}</strong>`);
+            const loadingId = appendLoadingIndicator();
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("message", document.getElementById("user-input").value);
+            formData.append("lat", currentTargetLat);
+            formData.append("lon", currentTargetLon);
+
+            try {
+                const res = await fetch("/upload", { method: "POST", body: formData });
+                const data = await res.json();
+                uploadIndicator.classList.add("hidden");
+                removeMessage(loadingId);
+                appendAIMessage(`File: ${file.name}`, data.reply, data.chart, data.share_id);
+                loadHistory();
+                e.target.value = "";
+            } catch (err) {
+                uploadIndicator.classList.add("hidden");
+                removeMessage(loadingId);
+                appendAIMessage(`File: ${file.name}`, `⚠️ Document processing error: ${err.message}`, null, null);
+                e.target.value = "";
+            }
         }
 
-        function appendBotMessage(replyHtml, chartJson, timestamp) {
-            const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const chartId = 'chart-' + Math.random().toString(36).substr(2, 9);
-
-            let contentHtml = `
-                <div class="flex items-start space-x-3">
-                    <div class="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-sm border border-cyan-500/30 flex-shrink-0">
-                        <i class="fa-solid fa-cube"></i>
-                    </div>
-                    <div class="glass-panel p-4 text-sm rounded-xl w-full max-w-5xl shadow-md border-l-4 border-cyan-500 border border-slate-200 dark:border-slate-800">
-                        <div class="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed">${replyHtml}</div>
-                        <span class="block text-left text-[10px] text-slate-500 dark:text-slate-400 mt-2">${time}</span>
-                        ${chartJson ? `
-                            <div class="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="text-xs text-slate-500 dark:text-slate-400 font-medium"><i class="fa-solid fa-cube text-cyan-600 dark:text-cyan-400 mr-1"></i> 3D Telemetry Visualizer</span>
-                                    <div class="flex gap-2">
-                                        <button type="button" onclick="downloadChartImage('${chartId}', 'png')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-cyan-700 dark:text-cyan-400 px-2.5 py-1 rounded border border-slate-300 dark:border-slate-600 flex items-center gap-1 transition">
-                                            <i class="fa-solid fa-download"></i> PNG
-                                        </button>
-                                        <button type="button" onclick="downloadChartImage('${chartId}', 'svg')" class="text-xs bg-slate-200 hover:bg-slate-300 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-purple-700 dark:text-purple-400 px-2.5 py-1 rounded border border-slate-300 dark:border-slate-600 flex items-center gap-1 transition">
-                                            <i class="fa-solid fa-file-code"></i> SVG
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="${chartId}" class="plot-container rounded-lg overflow-hidden"></div>
-                            </div>
-                        ` : ''}
-                    </div>
+        function appendUserMessage(text) {
+            const container = document.getElementById("chat-messages");
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "flex items-start justify-end gap-2.5";
+            msgDiv.innerHTML = `
+                <div class="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs max-w-lg shadow-xl">
+                    <p>${text}</p>
                 </div>
             `;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
 
-            chatBox.insertAdjacentHTML('beforeend', contentHtml);
+        function appendAIMessage(promptText, htmlContent, chartJson, shareId) {
+            const container = document.getElementById("chat-messages");
+            const chartDivId = "chart-" + Math.random().toString(36).substring(2, 9);
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "flex items-start gap-3";
+
+            let chartHtml = "";
+            if (chartJson) {
+                chartHtml = `
+                    <div class="mt-3 flex items-center justify-between bg-slate-950/90 px-3 py-1.5 rounded-t-xl border-x border-t border-slate-700/60 text-[11px] font-mono text-slate-300">
+                        <span><i class="fa-solid fa-chart-line text-cyan-400 mr-1.5"></i> Hydrographic Visualization</span>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="resetChart('${chartDivId}')" title="Reset Camera" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-cyan-200 rounded border border-slate-600"><i class="fa-solid fa-rotate-right mr-1"></i>Reset</button>
+                            <button onclick="exportChart('${chartDivId}', 'png')" class="px-2 py-0.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded font-bold">PNG</button>
+                            <button onclick="exportChart('${chartDivId}', 'jpeg')" class="px-2 py-0.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded font-bold">JPEG</button>
+                            <button onclick="exportChart('${chartDivId}', 'pdf')" class="px-2 py-0.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded font-bold">PDF</button>
+                        </div>
+                    </div>
+                    <div id="${chartDivId}" class="w-full h-80 rounded-b-xl overflow-hidden border border-slate-700/60 bg-slate-950/80 shadow-2xl relative"></div>
+                `;
+            }
+
+            let shareBtnHtml = "";
+            if (shareId) {
+                const fullShareUrl = window.location.origin + "/share/" + shareId;
+                shareBtnHtml = `
+                    <div class="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px]">
+                        <span class="text-slate-400 font-mono"><i class="fa-solid fa-share-nodes text-cyan-400 mr-1"></i> Shareable Conversation Link:</span>
+                        <button onclick="navigator.clipboard.writeText('${fullShareUrl}'); alert('Conversation link copied to clipboard!');" class="px-2.5 py-1 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/40 rounded-md font-mono flex items-center gap-1 transition-all">
+                            <i class="fa-solid fa-copy"></i> Copy Link
+                        </button>
+                    </div>
+                `;
+            }
+
+            msgDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/30 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shrink-0 mt-0.5 shadow-md">
+                    <i class="fa-solid fa-cube"></i>
+                </div>
+                <div class="p-4 rounded-2xl bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 max-w-3xl w-full text-xs text-slate-100 space-y-2 shadow-2xl">
+                    ${htmlContent}
+                    ${chartHtml}
+                    ${shareBtnHtml}
+                </div>
+            `;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
 
             if (chartJson) {
                 setTimeout(() => {
                     try {
-                        const isDark = document.documentElement.classList.contains('dark');
-                        const plotData = typeof chartJson === 'string' ? JSON.parse(chartJson) : chartJson;
-
-                        // Adapt plot template to active theme
-                        if (plotData.layout) {
-                            plotData.layout.paper_bgcolor = isDark ? '#1e222d' : '#ffffff';
-                            plotData.layout.plot_bgcolor = isDark ? '#1e222d' : '#f8fafc';
-                        }
-
-                        const config = {
-                            responsive: true,
-                            displayModeBar: true,
-                            displaylogo: false,
-                            scrollZoom: true
-                        };
-                        Plotly.newPlot(chartId, plotData.data, plotData.layout, config).then(() => {
-                            Plotly.Plots.resize(document.getElementById(chartId));
-                        });
+                        const parsedChart = typeof chartJson === "string" ? JSON.parse(chartJson) : chartJson;
+                        Plotly.newPlot(chartDivId, parsedChart.data, parsedChart.layout, { responsive: true, displayModeBar: false });
+                        Plotly.Plots.resize(chartDivId);
                     } catch (e) {
                         console.error("Plotly render error:", e);
                     }
-                }, 50);
-            }
-            scrollToBottom();
-        }
-
-        function downloadChartImage(chartId, format) {
-            const chartDiv = document.getElementById(chartId);
-            if (chartDiv) {
-                Plotly.downloadImage(chartDiv, { format: format, width: 1400, height: 900, filename: 'floatchat_3d_' + format.toUpperCase() });
+                }, 80);
             }
         }
 
-        function startNewChat() {
-            location.reload();
+        function exportChart(divId, format) {
+            const el = document.getElementById(divId);
+            if (!el) return;
+            Plotly.downloadImage(el, { format: format, width: 1200, height: 800, filename: 'floatchat_telemetry_export' });
         }
 
-        function scrollToBottom() {
-            chatBox.scrollTop = chatBox.scrollHeight;
+        // ==========================================
+        // FIXED DUAL-SCENE CAMERA RESET FUNCTION
+        // ==========================================
+        function resetChart(divId) {
+            const el = document.getElementById(divId);
+            if (el && el._fullLayout) {
+                const update = {
+                    'scene.camera.eye': { x: 1.5, y: -1.5, z: 1.2 },
+                    'scene.camera.center': { x: 0, y: 0, z: 0 }
+                };
+                if (el._fullLayout.scene2) {
+                    update['scene2.camera.eye'] = { x: 1.5, y: -1.5, z: 1.2 };
+                    update['scene2.camera.center'] = { x: 0, y: 0, z: 0 };
+                }
+                Plotly.relayout(el, update);
+            }
         }
 
-        chatForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const message = userInput.value.trim();
-            const currentFile = stagedFile;
-
-            if (!message && !currentFile) return;
-
-            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            appendUserMessage(message, timeStr, currentFile ? currentFile.name : null);
-
-            userInput.value = '';
-            removeStagedFile();
-            sendBtn.disabled = true;
-
-            const loadingId = 'loading-' + Date.now();
-            chatBox.insertAdjacentHTML('beforeend', `
-                <div id="${loadingId}" class="flex items-center space-x-3 text-cyan-600 dark:text-cyan-400 text-xs py-2">
-                    <i class="fa-solid fa-spinner fa-spin text-sm"></i>
-                    <span>Extracting questions & generating 3D oceanographic visualization...</span>
+        function appendLoadingIndicator() {
+            const container = document.getElementById("chat-messages");
+            const id = "load-" + Math.random().toString(36).substring(2, 9);
+            const msgDiv = document.createElement("div");
+            msgDiv.id = id;
+            msgDiv.className = "flex items-start gap-3";
+            msgDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/30 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shrink-0 mt-0.5 shadow-md">
+                    <i class="fa-solid fa-gear fa-spin"></i>
                 </div>
-            `);
-            scrollToBottom();
+                <div class="p-3.5 rounded-2xl bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 text-xs text-slate-200 flex items-center gap-2 shadow-xl">
+                    <span class="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                    <span>Analyzing In-Situ ARGO observations & computing 3D fields...</span>
+                </div>
+            `;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+            return id;
+        }
 
+        function removeMessage(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        async function load3DGlobe() {
+            const loading = document.getElementById("globe-loading");
             try {
-                let response;
-                if (currentFile) {
-                    const formData = new FormData();
-                    formData.append('message', message);
-                    formData.append('file', currentFile);
-                    formData.append('lat', pinnedLocation.lat);
-                    formData.append('lon', pinnedLocation.lon);
-                    formData.append('lang', voiceLangSelect.value.split('-')[0]);
+                const res = await fetch("/api/globe/full");
+                const data = await res.json();
+                if (loading) loading.classList.add("hidden");
+                globeRendered = true;
 
-                    response = await fetch('/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } else {
-                    response = await fetch('/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            message: message,
-                            lat: pinnedLocation.lat,
-                            lon: pinnedLocation.lon,
-                            lang: voiceLangSelect.value.split('-')[0]
-                        })
-                    });
-                }
+                const target = document.getElementById("plotly-globe-target");
 
-                if (response.redirected) {
-                    window.location.href = response.url;
-                    return;
-                }
+                await Plotly.newPlot(target, data.chart.data, data.chart.layout, {
+                    responsive: true,
+                    displaylogo: false,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d']
+                });
 
-                const data = await response.json();
-                document.getElementById(loadingId)?.remove();
+                setTimeout(() => {
+                    Plotly.Plots.resize(target);
+                }, 80);
 
-                if (data.selected_region) {
-                    pinnedLocation = data.selected_region;
-                    activeRegionName.textContent = `${pinnedLocation.basin} (${pinnedLocation.lat.toFixed(1)}°N, ${pinnedLocation.lon.toFixed(1)}°E)`;
-                }
+                target.on('plotly_click', function (eventData) {
+                    if (eventData && eventData.points && eventData.points.length > 0) {
+                        const pt = eventData.points[0];
+                        let lat = pt.lat !== undefined ? pt.lat : 15.2;
+                        let lon = pt.lon !== undefined ? pt.lon : 88.5;
+                        const rawText = pt.text || pt.hovertext || "Observation Station";
 
-                appendBotMessage(data.reply || data.answer, data.chart, timeStr);
-                await loadHistoryFromDB();
+                        const mLat = rawText.match(/Lat:\s*(-?\d+(\.\d+)?)/);
+                        const mLon = rawText.match(/Lon:\s*(-?\d+(\.\d+)?)/);
+                        if (mLat) lat = parseFloat(mLat[1]);
+                        if (mLon) lon = parseFloat(mLon[1]);
+
+                        updateFooterTelemetry(lat, lon, rawText);
+                    }
+                });
+
             } catch (err) {
-                document.getElementById(loadingId)?.remove();
-                appendBotMessage("⚠️ Error: Pipeline failed to process request.", null);
-            } finally {
-                sendBtn.disabled = false;
+                if (loading) loading.innerHTML = `<span class="text-rose-400">Failed to render 3D Globe: ${err.message}</span>`;
             }
+        }
+
+        function updateFooterTelemetry(lat, lon, rawStationInfo) {
+            currentTargetLat = parseFloat(lat);
+            currentTargetLon = parseFloat(lon);
+
+            const cleanName = cleanStationString(rawStationInfo);
+            const basin = getBasinName(currentTargetLat, currentTargetLon);
+
+            document.getElementById("footer-station-name").innerText = cleanName;
+            document.getElementById("footer-basin-badge").innerText = basin;
+            document.getElementById("active-station-badge").innerText = `${cleanName} (${basin})`;
+
+            const latDir = currentTargetLat >= 0 ? "°N" : "°S";
+            const lonDir = currentTargetLon >= 0 ? "°E" : "°W";
+            const latStr = `${Math.abs(currentTargetLat).toFixed(1)}${latDir}`;
+            const lonStr = `${Math.abs(currentTargetLon).toFixed(1)}${lonDir}`;
+
+            document.getElementById("footer-lat").innerText = latStr;
+            document.getElementById("footer-lon").innerText = lonStr;
+
+            let sst = 29.4;
+            if (Math.abs(currentTargetLat) > 55) sst = 0.5;
+            else if (Math.abs(currentTargetLat) > 35) sst = 18.2;
+            else if (Math.abs(currentTargetLat) <= 15) sst = 29.4;
+            document.getElementById("footer-sst").innerText = `${sst.toFixed(1)} °C`;
+
+            if (currentLang === "mr") {
+                currentSelectedQuery = `${basin} मधील ${latStr}, ${lonStr} जवळ 0 ते 1000 dbar दरम्यान तापमान, क्षारता, DOXY आणि थर्मोक्लाइन ग्रेडियंटचे विश्लेषण करा.`;
+            } else if (currentLang === "hi") {
+                currentSelectedQuery = `${basin} में ${latStr}, ${lonStr} के पास 0 से 1000 dbar के बीच तापमान, लवणता, DOXY और थर्मोक्लाइन ग्रेडिएंट का विश्लेषण करें।`;
+            } else {
+                currentSelectedQuery = `Analyze vertical temperature, salinity, DOXY, and thermocline gradient at ${latStr}, ${lonStr} in the ${basin} from 0 to 1000 dbar.`;
+            }
+
+            document.getElementById("footer-generated-query").innerText = `"${currentSelectedQuery}"`;
+
+            const footer = document.getElementById("globe-footer");
+            footer.classList.add("ring-2", "ring-cyan-400");
+            setTimeout(() => footer.classList.remove("ring-2", "ring-cyan-400"), 900);
+        }
+
+        function teleportGlobe(lat, lon, name) {
+            updateFooterTelemetry(lat, lon, name);
+            const target = document.getElementById("plotly-globe-target");
+            Plotly.relayout(target, {
+                'geo.projection.rotation.lat': lat,
+                'geo.projection.rotation.lon': lon
+            });
+        }
+
+        function redirectFooterQueryToChat() {
+            switchView("chat");
+            document.getElementById("user-input").value = currentSelectedQuery;
+            document.getElementById("chat-form").dispatchEvent(new Event("submit"));
+        }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            loadHistory();
+            setLanguage('en');
         });
 
-        document.addEventListener('DOMContentLoaded', () => {
-            applySavedTheme();
-            updateLanguageUI();
-            loadHistoryFromDB();
+        window.addEventListener("resize", () => {
+            const target = document.getElementById("plotly-globe-target");
+            if (target && globeRendered) Plotly.Plots.resize(target);
         });
     </script>
 </body>
