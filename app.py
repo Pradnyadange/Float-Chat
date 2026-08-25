@@ -378,191 +378,8 @@ def detect_query_lang(text: str) -> str:
         return "hi"
     return "en"
 
-def normalize_multilingual_query(raw_text: str) -> dict:
-    detected = detect_query_lang(raw_text)
-    if not groq_client or not raw_text.strip():
-        return {"english_query": raw_text, "lang": detected}
-
-    try:
-        completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Translate input into standard English oceanographic syntax. "
-                        "Identify language ('en', 'hi', 'mr'). "
-                        "Return ONLY JSON: {\"english_query\": \"...\", \"lang\": \"...\"}."
-                    )
-                },
-                {"role": "user", "content": raw_text}
-            ],
-            temperature=0.0,
-            response_format={"type": "json_object"}
-        )
-        parsed = json.loads(completion.choices[0].message.content)
-        if detected in ["hi", "mr"]:
-            parsed["lang"] = detected
-        return parsed
-    except Exception:
-        return {"english_query": raw_text, "lang": detected}
-
-def repair_ocr_scientific_text(raw_text: str) -> str:
-    if not raw_text or not raw_text.strip():
-        return ""
-    
-    cleaned = raw_text.replace("\r\n", " ").replace("\n", " ")
-    cleaned = re.sub(r'\b[LTl]OO\b', '100', cleaned)
-    cleaned = re.sub(r'\b[1l]OO\b', '100', cleaned)
-    cleaned = re.sub(r'\bdbe\b', 'dbar', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\btat\s+is\b', 'What is', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\bavetage\b|\bavefage\b', 'average', cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'\btempefatuwe\b|\btenperature\b|\btempetature\b', 'temperature', cleaned, flags=re.IGNORECASE)
-    cleaned = " ".join(cleaned.split()).strip()
-
-    if not groq_client or len(cleaned) < 5:
-        return cleaned
-
-    try:
-        completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Proofread this OCR transcription. Fix spelling mistakes or OCR typos. "
-                        "Do NOT summarize, do NOT delete any parameters. Return strictly the clean sentence string."
-                    )
-                },
-                {"role": "user", "content": f"RAW OCR INPUT:\n{cleaned}"}
-            ],
-            temperature=0.0,
-            max_tokens=200
-        )
-        result = completion.choices[0].message.content.strip().strip('"\'')
-        return result if len(result) >= 5 else cleaned
-    except Exception:
-        return cleaned
-
-def run_vision_ocr(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        w, h = img.size
-        scale = max(3, int(1500 / max(1, w)))
-        img_large = img.resize((w * scale, h * scale), Image.Resampling.LANCZOS)
-
-        gray = img_large.convert('L')
-        stat = np.array(gray).mean()
-        if stat < 120:
-            gray = ImageOps.invert(gray)
-        
-        enhancer = ImageEnhance.Contrast(gray)
-        processed_img = enhancer.enhance(2.2).convert('RGB')
-        
-        if pytesseract:
-            try:
-                local_txt = pytesseract.image_to_string(processed_img).strip()
-                if len(local_txt) > 8:
-                    return repair_ocr_scientific_text(local_txt)
-            except Exception:
-                pass
-
-        if groq_client:
-            try:
-                buffer = io.BytesIO()
-                processed_img.save(buffer, format="JPEG", quality=95)
-                clean_bytes = buffer.getvalue()
-                base64_image = base64.b64encode(clean_bytes).decode("utf-8")
-                
-                completion = groq_client.chat.completions.create(
-                    model="llama-3.2-11b-vision-preview",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text", 
-                                    "text": "Read and transcribe every single word in this image verbatim without summary."
-                                },
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                            ]
-                        }
-                    ],
-                    temperature=0.0,
-                    max_tokens=300
-                )
-                raw_transcription = completion.choices[0].message.content.strip()
-                if len(raw_transcription) > 6:
-                    return repair_ocr_scientific_text(raw_transcription)
-            except Exception as ge:
-                print(f"Groq Vision OCR Exception: {ge}")
-
-        if genai and GEMINI_API_KEY:
-            try:
-                model = genai.GenerativeModel('gemini-2.0-flash')
-                response = model.generate_content([
-                    "Transcribe all text in this image verbatim without summarizing.",
-                    processed_img
-                ])
-                if response and response.text:
-                    return repair_ocr_scientific_text(response.text.strip())
-            except Exception as gme:
-                print(f"Gemini Vision Fallback Exception: {gme}")
-
-        return ""
-    except Exception as e:
-        print(f"Vision OCR Pipeline Exception: {e}")
-        return ""
-
-def extract_text_from_any_file(filepath: str) -> str:
-    ext = os.path.splitext(filepath)[1].lower()
-    raw_text = ""
-
-    if ext in [".txt", ".csv", ".json", ".dat"]:
-        try:
-            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                raw_text = f.read()
-        except Exception:
-            pass
-    elif ext == ".pdf":
-        try:
-            reader = pypdf.PdfReader(filepath)
-            extracted_pages = []
-            for page in reader.pages:
-                t = page.extract_text()
-                if t and len(t.strip()) > 3:
-                    extracted_pages.append(t.strip())
-            if extracted_pages:
-                raw_text = " ".join(extracted_pages)
-        except Exception:
-            pass
-
-        if not raw_text.strip():
-            try:
-                with open(filepath, "rb") as f:
-                    raw_text = run_vision_ocr(f.read())
-            except Exception:
-                pass
-
-    elif ext in [".png", ".jpg", ".jpeg", ".webp"]:
-        with open(filepath, "rb") as f:
-            mime = "image/png" if ext == ".png" else "image/jpeg"
-            raw_text = run_vision_ocr(f.read(), mime_type=mime)
-
-    cleaned = " ".join(raw_text.replace("\n", " ").split()).strip()
-    return repair_ocr_scientific_text(cleaned)
-
-def extract_exact_clean_questions(normalized_text: str, user_prompt: str = "") -> str:
-    source = (normalized_text + " " + user_prompt).strip()
-    if not source or len(source) < 4:
-        return "Find ARGO observations within 5° of the equator from the last year."
-    return repair_ocr_scientific_text(source)
-
 # ==============================================================================
-# 7. 3D VISUALIZERS WITH CONFIDENCE SCORE BADGE EXPLICITLY INCLUDED
+# 7. 3D VISUALIZERS & CONTEXT-AWARE FOLLOW-UP PARSER
 # ==============================================================================
 def render_full_dedicated_3d_globe():
     df_floats = pd.DataFrame(GLOBAL_FLOAT_DATASET)
@@ -589,14 +406,25 @@ def build_obs_card(station):
     </div>
     """
 
-def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_lon: float = 65.0, lang: str = "en"):
+def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_lon: float = 65.0, lang: str = "en", last_coords=None):
     t_low = combined_text.lower()
-    df = fetch_region_data()
+
+    # Context-aware follow-up handling for things like "Compare Salinity" after a comparison
+    is_followup_salinity = any(k in t_low for k in ["compare salinity", "salinity compare", "क्षारता तुलना"])
+    if is_followup_salinity and last_coords and len(last_coords) >= 2:
+        c1, c2 = last_coords[0], last_coords[1]
+    else:
+        coords = extract_all_coordinates(combined_text)
+        if len(coords) >= 2:
+            c1, c2 = coords[0], coords[1]
+        elif last_coords and len(last_coords) >= 2 and any(k in t_low for k in ["compare", "vs", "versus", "salinity", "temperature"]):
+            c1, c2 = last_coords[0], last_coords[1]
+        else:
+            c1, c2 = (15.0, 65.0), (10.0, 70.0)
 
     is_trench = any(k in t_low for k in ["mariana", "challenger", "trench", "abyssal", "गर्त", "खंदक"])
     is_thermocline = any(k in t_low for k in ["thermocline", "dt/dz", "gradient", "थर्मोक्लाइन", "तापमान ग्रेडियंट"])
-    is_comprehensive = any(k in t_low for k in ["pycnocline", "comprehensive", "संपूर्ण माहिती"]) and not is_thermocline
-    is_comparison = any(k in t_low for k in ["compare", "vs", "versus", "तुलना", "फरक"]) or len(extract_all_coordinates(combined_text)) >= 2
+    is_comparison = any(k in t_low for k in ["compare", "vs", "versus", "तुलना", "फरक", "salinity"]) or len(coords) >= 2 or is_followup_salinity
     is_equator = any(k in t_low for k in ["within 5", "equator", "observations within", "find argo observations", "विषुववृत्ताच्या"])
 
     if is_trench:
@@ -622,7 +450,6 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
                 <i class="fa-solid fa-shield-halved"></i> Confidence Score: {confidence}%
             </span>
-            <span class="text-[10px] text-slate-400 font-mono">Hadalzone Hydrostatic Model</span>
         </div>
         """
         obs_card = """
@@ -637,7 +464,7 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
         </div>
         """
         resp = primary_highlight + confidence_badge + f'<div><p class="text-xs font-semibold text-slate-200 mb-2">📋 Observation Record:</p><div class="mb-3">{obs_card}</div></div>'
-        return resp, fig.to_json()
+        return resp, fig.to_json(), [c1, c2]
 
     elif is_thermocline:
         target_lat, target_lon, target_pres = extract_coordinates_and_depth(combined_text, default_lat, default_lon)
@@ -670,24 +497,32 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
                 <i class="fa-solid fa-shield-halved"></i> Confidence Score: {confidence}%
             </span>
-            <span class="text-[10px] text-slate-400 font-mono">Pycnocline Dynamic Model</span>
         </div>
         """
         resp = primary_highlight + confidence_badge + f'<div><p class="text-xs font-semibold text-slate-200 mb-2">📋 Hydrographic Observation Record:</p><div class="mb-3">{obs_card}</div></div>'
-        return resp, fig.to_json()
+        return resp, fig.to_json(), [c1, c2]
 
     elif is_comparison:
-        coords = extract_all_coordinates(combined_text)
-        c1, c2 = (coords[0] if len(coords) > 0 else (15.0, 65.0)), (coords[1] if len(coords) > 1 else (10.0, 70.0))
         basin1, basin2 = get_ocean_basin_name(c1[0], c1[1]), get_ocean_basin_name(c2[0], c2[1])
-        vals1 = [calc_temperature_at_depth(p, c1[0], c1[1]) for p in np.linspace(0, 500, 30)]
-        vals2 = [calc_temperature_at_depth(p, c2[0], c2[1]) for p in np.linspace(0, 500, 30)]
-        confidence = 92.0
+        is_salinity_comp = "salinity" in t_low
+        
+        if is_salinity_comp:
+            vals1 = [calc_salinity_at_depth(p, c1[0], c1[1]) for p in np.linspace(0, 500, 30)]
+            vals2 = [calc_salinity_at_depth(p, c2[0], c2[1]) for p in np.linspace(0, 500, 30)]
+            param_label = "ΔSalinity"
+            unit_label = "PSU"
+        else:
+            vals1 = [calc_temperature_at_depth(p, c1[0], c1[1]) for p in np.linspace(0, 500, 30)]
+            vals2 = [calc_temperature_at_depth(p, c2[0], c2[1]) for p in np.linspace(0, 500, 30)]
+            param_label = "ΔSST"
+            unit_label = "°C"
+
+        confidence = 93.5
 
         fig = make_subplots(
             rows=1, cols=2, column_widths=[0.5, 0.5],
             specs=[[{"type": "scene"}, {"type": "scene"}]],
-            subplot_titles=(f"Station 1 Profile ({c1[0]}°N)", f"Station 2 Profile ({c2[0]}°N)")
+            subplot_titles=(f"Station 1 ({c1[0]}°N, {c1[1]}°E)", f"Station 2 ({c2[0]}°N, {c2[1]}°E)")
         )
         fig.add_trace(go.Scatter3d(x=[0]*30, y=vals1, z=list(range(-30, 0)), mode="lines", line=dict(color="#f43f5e", width=7), name="Station 1"), row=1, col=1)
         fig.add_trace(go.Scatter3d(x=[0]*30, y=vals2, z=list(range(-30, 0)), mode="lines", line=dict(color="#38bdf8", width=7), name="Station 2"), row=1, col=2)
@@ -697,18 +532,18 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
             <div class="p-2.5 bg-slate-900/90 border border-rose-500/40 rounded-xl shadow-inner">
                 <span class="text-xs font-bold text-rose-400 block mb-1">📍 Station 1 ({c1[0]}°N, {c1[1]}°E)</span>
-                <p class="text-xs text-slate-200 font-mono">SST: <strong>{vals1[0]:.2f} °C</strong> | Basin: {basin1}</p>
+                <p class="text-xs text-slate-200 font-mono">Value: <strong>{vals1[0]:.2f} {unit_label}</strong> | Basin: {basin1}</p>
             </div>
             <div class="p-2.5 bg-slate-900/90 border border-sky-500/40 rounded-xl shadow-inner">
                 <span class="text-xs font-bold text-sky-400 block mb-1">📍 Station 2 ({c2[0]}°N, {c2[1]}°E)</span>
-                <p class="text-xs text-slate-200 font-mono">SST: <strong>{vals2[0]:.2f} °C</strong> | Basin: {basin2}</p>
+                <p class="text-xs text-slate-200 font-mono">Value: <strong>{vals2[0]:.2f} {unit_label}</strong> | Basin: {basin2}</p>
             </div>
         </div>
         """
         primary_highlight = f"""
         <div class="p-3 mb-3 bg-gradient-to-r from-sky-950 via-slate-900 to-slate-900 border-l-4 border-sky-400 rounded-r-xl shadow-xl">
             <span class="text-[10px] font-mono uppercase tracking-widest text-sky-400 font-bold block mb-0.5">⭐ Featured Primary Answer</span>
-            <p class="text-sm font-extrabold text-white">Regions: <span class="text-cyan-300 font-mono">{basin1} vs {basin2}</span> | ΔSST: <span class="text-amber-300 font-mono">{abs(vals2[0]-vals1[0]):.2f} °C</span></p>
+            <p class="text-sm font-extrabold text-white">Regions: <span class="text-cyan-300 font-mono">{basin1} vs {basin2}</span> | {param_label}: <span class="text-amber-300 font-mono">{abs(vals2[0]-vals1[0]):.2f} {unit_label}</span></p>
         </div>
         """
         confidence_badge = f"""
@@ -719,7 +554,7 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
         </div>
         """
         resp = primary_highlight + confidence_badge + f'<div><p class="text-xs font-semibold text-slate-200 mb-2">📋 Comparison Records:</p>{obs_card}</div>'
-        return resp, fig.to_json()
+        return resp, fig.to_json(), [c1, c2]
 
     elif is_equator:
         equatorial_floats = [f for f in GLOBAL_FLOAT_DATASET if abs(f["lat"]) <= 5.0]
@@ -744,7 +579,7 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
         </div>
         """
         resp = primary_highlight + confidence_badge + f'<div><p class="text-xs font-semibold text-slate-200 mb-2">📋 Station Breakdown:</p><div class="max-h-60 overflow-y-auto">{float_cards_html}</div></div>'
-        return resp, fig.to_json()
+        return resp, fig.to_json(), [c1, c2]
 
     else:
         target_lat, target_lon, target_pres = extract_coordinates_and_depth(combined_text, default_lat, default_lon)
@@ -784,7 +619,7 @@ def process_ocean_query(combined_text: str, default_lat: float = 18.0, default_l
         </div>
         """
         resp = primary_highlight + confidence_badge + f'<div><p class="text-xs font-semibold text-slate-200 mb-2">📋 Observation Record:</p><div class="mb-3">{obs_card}</div></div>'
-        return resp, fig.to_json()
+        return resp, fig.to_json(), [c1, c2]
 
 # ==============================================================================
 # 8. APPLICATION ENDPOINTS
@@ -881,8 +716,18 @@ def chat():
         f_lat = float(req_json.get("lat", 18.0))
         f_lon = float(req_json.get("lon", 65.0))
 
+        # Retrieve last session coordinates from ChromaDB history if available
+        hist = get_history_from_chromadb(current_user)
+        last_coords = None
+        if hist:
+            for h in reversed(hist):
+                c = extract_all_coordinates(h["prompt"])
+                if len(c) >= 2:
+                    last_coords = c
+                    break
+
         lang = detect_query_lang(msg)
-        resp, chart = process_ocean_query(msg, default_lat=f_lat, default_lon=f_lon, lang=lang)
+        resp, chart, _ = process_ocean_query(msg, default_lat=f_lat, default_lon=f_lon, lang=lang, last_coords=last_coords)
         share_uuid = save_to_chromadb(msg, resp, chart, time.strftime("%I:%M %p"), user=current_user)
         return jsonify({"reply": resp, "chart": chart, "share_id": share_uuid})
     except Exception as err:
@@ -901,7 +746,16 @@ def upload_file():
         doc_text = extract_text_from_any_file(path)
         clean_extracted_text = extract_exact_clean_questions(doc_text, msg)
 
-        resp, chart = process_ocean_query(clean_extracted_text)
+        hist = get_history_from_chromadb(current_user)
+        last_coords = None
+        if hist:
+            for h in reversed(hist):
+                c = extract_all_coordinates(h["prompt"])
+                if len(c) >= 2:
+                    last_coords = c
+                    break
+
+        resp, chart, _ = process_ocean_query(clean_extracted_text, last_coords=last_coords)
         
         extracted_box_html = f"""
         <div class="p-3.5 mb-3.5 bg-cyan-950/80 border border-cyan-500/50 rounded-xl shadow-lg">
